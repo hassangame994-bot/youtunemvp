@@ -153,19 +153,16 @@ button {
     flex: 0 1 640px;
     display: flex;
     justify-content: center;
-    min-width: 0;
 }
 
 .search-box {
     display: flex;
     width: 100%;
     max-width: 600px;
-    min-width: 0;
 }
 
 .search-input-wrapper {
     flex: 1;
-    min-width: 0;
     display: flex;
     align-items: center;
     background-color: #121212;
@@ -611,27 +608,197 @@ button {
     }
 }
 
-@media (max-width: 480px) {
+/* ==========================================================================
+   Improved Responsive Design
+   ========================================================================== */
+
+/* Prevent flex/grid children from causing horizontal overflow */
+html,
+body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.app-layout,
+.main-content,
+.header-center,
+.search-box,
+.video-grid {
+    min-width: 0;
+}
+
+/* Make images and media always stay inside their containers */
+img,
+svg,
+video {
+    max-width: 100%;
+}
+
+/* =========================
+   Tablet
+   ========================= */
+@media (max-width: 1024px) {
+
+    :root {
+        --sidebar-width: 220px;
+    }
+
+    .main-content {
+        padding: 16px;
+    }
+
+    .video-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px 14px;
+    }
+
+    .header-center {
+        flex: 1 1 auto;
+        max-width: 500px;
+    }
+}
+
+
+/* =========================
+   Small Tablet / Large Phone
+   ========================= */
+@media (max-width: 768px) {
+
     .app-header {
+        padding: 0 10px;
+        gap: 8px;
+    }
+
+    .header-left {
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .brand-name {
+        display: none;
+    }
+
+    .header-center {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        margin: 0;
+    }
+
+    .search-box {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .search-input-wrapper {
+        min-width: 0;
+        padding: 0 12px;
+    }
+
+    .search-input-wrapper input {
+        min-width: 0;
+        font-size: 14px;
+    }
+
+    .search-btn {
+        width: 48px;
+        flex-shrink: 0;
+    }
+
+    .header-right {
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .app-sidebar {
+        width: min(280px, 85vw);
+    }
+
+    .main-content {
+        width: 100%;
+        margin-left: 0;
+        padding: 12px;
+    }
+
+    .category-bar-wrapper {
+        padding: 6px 0 12px;
+    }
+
+    .category-bar {
+        gap: 8px;
+        padding-bottom: 2px;
+    }
+
+    .chip {
+        padding: 7px 12px;
+        font-size: 13px;
+    }
+
+    .video-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px 12px;
+    }
+
+    .video-details {
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .channel-avatar {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+    }
+
+    .video-title {
+        font-size: 14px;
+    }
+
+    .channel-name,
+    .video-meta {
+        font-size: 12px;
+    }
+
+    .state-container {
+        padding: 48px 12px;
+    }
+
+    .state-actions {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+}
+
+
+/* =========================
+   Mobile
+   ========================= */
+@media (max-width: 600px) {
+
+    .app-header {
+        height: 56px;
         padding: 0 8px;
     }
 
     .header-left {
-        gap: 8px;
-    }
-
-    .icon-btn {
-        width: 36px;
-        height: 36px;
-    }
-
-    .brand-logo {
-        font-size: 16px;
         gap: 4px;
     }
 
+    .icon-btn {
+        width: 38px;
+        height: 38px;
+        flex-shrink: 0;
+    }
+
+    .brand-icon {
+        width: 24px;
+        height: 24px;
+    }
+
     .header-center {
-        margin: 0 6px;
+        margin: 0 4px;
     }
 
     .search-input-wrapper {
@@ -639,15 +806,140 @@ button {
     }
 
     .search-input-wrapper input {
-        font-size: 14px;
+        height: 36px;
+        font-size: 13px;
+    }
+
+    .search-input-wrapper input::placeholder {
+        font-size: 12px;
     }
 
     .search-btn {
         width: 44px;
+        height: 38px;
     }
 
+    .avatar-btn {
+        width: 34px;
+        height: 34px;
+        font-size: 14px;
+    }
+
+    .main-content {
+        padding: 10px;
+    }
+
+    .video-grid {
+        grid-template-columns: 1fr;
+        gap: 22px;
+    }
+
+    .thumbnail-container {
+        width: 100%;
+        border-radius: 10px;
+    }
+
+    .video-details {
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .channel-avatar {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+    }
+
+    .video-title {
+        font-size: 15px;
+        line-height: 1.35;
+    }
+
+    .channel-name,
+    .video-meta {
+        font-size: 13px;
+    }
+
+    .state-container h2 {
+        font-size: 18px;
+    }
+
+    .state-container p {
+        font-size: 13px;
+    }
+
+    .btn {
+        width: 100%;
+        max-width: 280px;
+    }
+
+    .user-dropdown {
+        right: -4px;
+        width: min(260px, calc(100vw - 20px));
+    }
+}
+
+
+/* =========================
+   Very Small Phones
+   ========================= */
+@media (max-width: 380px) {
+
+    .app-header {
+        padding: 0 6px;
+    }
+
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .header-center {
+        margin: 0 2px;
+    }
+
+    .search-btn {
+        width: 40px;
+    }
+
+    .search-input-wrapper {
+        padding: 0 8px;
+    }
+
+    .search-input-wrapper input {
+        font-size: 12px;
+    }
+
+    .search-input-wrapper input::placeholder {
+        font-size: 11px;
+    }
+
+    .main-content {
+        padding: 8px;
+    }
+
+    .chip {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .video-grid {
+        gap: 18px;
+    }
+
+    .video-title {
+        font-size: 14px;
+    }
+}
+
+
+/* =========================
+   Extra Small Phones
+   ========================= */
+@media (max-width: 320px) {
+
     .header-right {
-        gap: 6px;
+        gap: 0;
     }
 
     .avatar-btn {
@@ -656,43 +948,23 @@ button {
         font-size: 13px;
     }
 
-    .user-dropdown {
-        width: 200px;
+    .search-btn {
+        width: 38px;
+    }
+
+    .search-input-wrapper input::placeholder {
+        font-size: 10px;
     }
 
     .main-content {
-        padding: 10px 12px;
+        padding: 6px;
     }
 
     .category-bar-wrapper {
-        padding: 6px 0 12px 0;
+        padding-bottom: 8px;
     }
 
-    .chip {
-        padding: 6px 12px;
-        font-size: 13px;
-    }
-
-    .video-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-
-    .video-title {
-        font-size: 14px;
-    }
-
-    .channel-avatar {
-        width: 32px;
-        height: 32px;
-    }
-
-    .state-container {
-        padding: 40px 16px;
-    }
-
-    .state-actions {
-        flex-direction: column;
-        width: 100%;
+    .video-details {
+        gap: 8px;
     }
 }
