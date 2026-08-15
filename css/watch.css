@@ -158,16 +158,19 @@ button {
     flex: 0 1 640px;
     display: flex;
     justify-content: center;
+    min-width: 0;
 }
 
 .search-box {
     display: flex;
     width: 100%;
     max-width: 600px;
+    min-width: 0;
 }
 
 .search-input-wrapper {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     background-color: #121212;
@@ -387,6 +390,7 @@ button {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .action-btn {
@@ -607,6 +611,92 @@ button {
         padding: 16px;
     }
 }
+
+@media (max-width: 768px) {
+    .app-header {
+        padding: 0 8px;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .brand-logo {
+        font-size: 16px;
+    }
+
+    .header-center {
+        flex: 1;
+        max-width: none;
+        margin: 0 6px;
+    }
+
+    .search-input-wrapper {
+        padding: 0 10px;
+    }
+
+    .search-btn {
+        width: 44px;
+    }
+
+    .avatar-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+
+    .brand-name {
+        display: none;
+    }
+
+    .watch-main-content {
+        padding: 12px;
+    }
+
+    .video-title-main {
+        font-size: 17px;
+        margin-top: 12px;
+    }
+
+    .channel-avatar-lg {
+        width: 38px;
+        height: 38px;
+    }
+
+    .channel-name-main {
+        font-size: 14px;
+    }
+
+    .action-btn {
+        padding: 7px 12px;
+        font-size: 13px;
+    }
+
+    .description-box {
+        padding: 12px;
+    }
+
+    .rec-thumb-container {
+        width: 120px;
+    }
+
+    .rec-title {
+        font-size: 13px;
+    }
+
+    .rec-meta {
+        font-size: 11px;
+    }
+
+    .state-container {
+        padding: 48px 16px;
+    }
+}
 /* عند الإعجاب بالفيديو */
 .action-btn.liked {
     background-color: #ffffff !important;
@@ -622,4 +712,3 @@ button {
 .action-btn.liked:hover {
     background-color: #e5e5e5 !important;
 }
-
