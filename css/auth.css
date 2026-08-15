@@ -251,8 +251,54 @@ body {
     text-decoration: underline;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+    body {
+        padding: 16px 12px;
+        align-items: flex-start;
+    }
+
     .auth-card {
-        padding: 28px 20px;
+        padding: 24px 18px;
+        border-radius: var(--radius-md);
+    }
+
+    .auth-header {
+        margin-bottom: 20px;
+    }
+
+    .brand-logo {
+        font-size: 19px;
+    }
+
+    .auth-title {
+        font-size: 19px;
+    }
+
+    .auth-subtitle {
+        font-size: 13px;
+    }
+
+    .form-input {
+        height: 42px;
+        font-size: 14px;
+    }
+
+    .btn {
+        height: 42px;
+        font-size: 14px;
+    }
+
+    .auth-footer {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 380px) {
+    .auth-card {
+        padding: 20px 14px;
+    }
+
+    .auth-title {
+        font-size: 18px;
     }
 }
