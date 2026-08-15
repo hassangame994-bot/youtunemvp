@@ -169,16 +169,19 @@ button {
     flex: 0 1 640px;
     display: flex;
     justify-content: center;
+    min-width: 0;
 }
 
 .search-box {
     display: flex;
     width: 100%;
     max-width: 600px;
+    min-width: 0;
 }
 
 .search-input-wrapper {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     background-color: #121212;
@@ -358,6 +361,7 @@ button {
     color: var(--warning-color);
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .alert-content {
@@ -713,5 +717,78 @@ button {
         flex: 1;
         max-width: none;
         margin: 0 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-header {
+        padding: 0 8px;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .brand-logo {
+        font-size: 16px;
+    }
+
+    .header-center {
+        margin: 0 6px;
+    }
+
+    .search-input-wrapper {
+        padding: 0 10px;
+    }
+
+    .search-btn {
+        width: 44px;
+    }
+
+    .avatar-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+
+    .upload-main-content {
+        padding: 14px 10px;
+    }
+
+    .page-title {
+        font-size: 20px;
+    }
+
+    .upload-form-card {
+        padding: 16px;
+    }
+
+    .drop-zone {
+        padding: 18px 12px;
+    }
+
+    .preview-card {
+        padding: 14px;
+    }
+
+    .success-container {
+        padding: 24px 16px;
+    }
+
+    .success-actions {
+        flex-direction: column;
+    }
+
+    .success-actions .btn {
+        width: 100%;
+    }
+
+    .form-actions {
+        flex-wrap: wrap;
     }
 }
