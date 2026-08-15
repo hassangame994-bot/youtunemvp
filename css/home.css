@@ -153,16 +153,19 @@ button {
     flex: 0 1 640px;
     display: flex;
     justify-content: center;
+    min-width: 0;
 }
 
 .search-box {
     display: flex;
     width: 100%;
     max-width: 600px;
+    min-width: 0;
 }
 
 .search-input-wrapper {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     background-color: #121212;
@@ -605,5 +608,91 @@ button {
         flex: 1;
         max-width: none;
         margin: 0 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-header {
+        padding: 0 8px;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .brand-logo {
+        font-size: 16px;
+        gap: 4px;
+    }
+
+    .header-center {
+        margin: 0 6px;
+    }
+
+    .search-input-wrapper {
+        padding: 0 10px;
+    }
+
+    .search-input-wrapper input {
+        font-size: 14px;
+    }
+
+    .search-btn {
+        width: 44px;
+    }
+
+    .header-right {
+        gap: 6px;
+    }
+
+    .avatar-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+
+    .user-dropdown {
+        width: 200px;
+    }
+
+    .main-content {
+        padding: 10px 12px;
+    }
+
+    .category-bar-wrapper {
+        padding: 6px 0 12px 0;
+    }
+
+    .chip {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    .video-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .video-title {
+        font-size: 14px;
+    }
+
+    .channel-avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .state-container {
+        padding: 40px 16px;
+    }
+
+    .state-actions {
+        flex-direction: column;
+        width: 100%;
     }
 }
