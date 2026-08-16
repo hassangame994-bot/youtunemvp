@@ -12,6 +12,9 @@ let allVideos = [];
 let userCategories = []; // categories the user likes / has searched before
 let activeCategory = "All";
 let searchQuery = "";
+let currentPage = 1;
+let hasMoreVideos = false;
+let isLoadingMore = false;
 
 // Initialize App
 document.addEventListener("DOMContentLoaded", async () => {
@@ -68,7 +71,14 @@ function setupEventListeners() {
     // Retry Button Handler for Error State
     const retryBtn = document.getElementById("retry-btn");
     if (retryBtn) {
-        retryBtn.addEventListener("click", fetchVideos);
+        retryBtn.addEventListener("click", () => fetchVideos());
+    }
+
+    // Load More Button Handler (optional - only wired if the page markup
+    // has a #load-more-btn element; safe no-op otherwise).
+    const loadMoreBtn = document.getElementById("load-more-btn");
+    if (loadMoreBtn) {
+        loadMoreBtn.addEventListener("click", loadMoreVideos);
     }
 }
 
@@ -171,13 +181,21 @@ function renderLoginButton() {
 
 /**
  * Fetch Video Grid Data
- * Uses GET /api/auth/get_videos
+ * Uses GET /api/auth/get_videos?page=N
+ *
+ * page 1 replaces the current grid (used on load, retry, and whenever a
+ * filter/search changes upstream). page > 1 (via loadMoreVideos) appends
+ * to what's already rendered.
  */
-async function fetchVideos() {
-    showState("loading");
+async function fetchVideos(page = 1) {
+    if (page === 1) {
+        showState("loading");
+    } else {
+        isLoadingMore = true;
+    }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos`, {
+        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos?page=${page}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json"
@@ -198,51 +216,79 @@ async function fetchVideos() {
 
         const data = await response.json();
 
+        let fetchedVideos = [];
+        let fetchedPreferredCategories = [];
+
         if (Array.isArray(data)) {
-            allVideos = data;
-            userCategories = [];
+            fetchedVideos = data;
+            fetchedPreferredCategories = [];
+            hasMoreVideos = false;
         } else if (data && Array.isArray(data.videos)) {
-            allVideos = data.videos;
-            userCategories = Array.isArray(data.preferredCategories) ? data.preferredCategories : [];
+            fetchedVideos = data.videos;
+            fetchedPreferredCategories = Array.isArray(data.preferredCategories) ? data.preferredCategories : [];
+            hasMoreVideos = Boolean(data.hasMore);
         } else {
-            allVideos = [];
-            userCategories = [];
+            hasMoreVideos = false;
         }
 
+        allVideos = page === 1 ? fetchedVideos : [...allVideos, ...fetchedVideos];
+        userCategories = fetchedPreferredCategories;
+        currentPage = page;
+
         applyFiltersAndRender();
+        updateLoadMoreButton();
     } catch (err) {
         console.error("Error fetching videos:", err);
-        showState("error", "Could not connect to the backend server or failed to load videos.");
+        if (page === 1) {
+            showState("error", "Could not connect to the backend server or failed to load videos.");
+        }
+    } finally {
+        isLoadingMore = false;
     }
+}
+
+/**
+ * Load the next page of ranked videos and append them to the grid.
+ * Safe no-op if there's no more content, a load is already in flight,
+ * or the page markup has no #load-more-btn (see setupEventListeners).
+ */
+function loadMoreVideos() {
+    if (!hasMoreVideos || isLoadingMore) return;
+    fetchVideos(currentPage + 1);
+}
+
+/**
+ * Shows/hides the optional #load-more-btn based on whether the backend
+ * says there's another page. No-ops if that element isn't in the markup.
+ */
+function updateLoadMoreButton() {
+    const btn = document.getElementById("load-more-btn");
+    if (!btn) return;
+    btn.classList.toggle("hidden", !hasMoreVideos);
 }
 
 /**
  * Filter videos based on active category and search query, then trigger render.
  *
  * Behavior:
- * - Default view ("All" category, no search typed): show ONLY videos
- *   whose category is one of the user's preferred categories (liked or
- *   searched before). This keeps the main feed focused on their taste.
+ * - Default view ("All" category, no search typed): render exactly what
+ *   the backend's ranking algorithm returned. That ranking already blends
+ *   the user's preferred categories with a controlled slice of "other"
+ *   categories for discovery (see PREFERRED_FEED_RATIO server-side) -
+ *   we do NOT re-filter down to preferred-only here, since that would
+ *   silently throw away the exploration half of the algorithm's output
+ *   and cut the feed roughly in half for no reason.
  * - As soon as the user picks a specific category chip, or types a
- *   search query, we intentionally stop restricting to their taste and
- *   show everything that matches - this is how they discover videos and
- *   categories they haven't interacted with yet.
+ *   search query, we search/filter across everything currently loaded -
+ *   this is how they explicitly explore categories beyond what's already
+ *   on screen.
  */
 function applyFiltersAndRender() {
     let filtered = [...allVideos];
 
     const isDefaultView = activeCategory === "All" && !searchQuery;
 
-    if (isDefaultView) {
-        if (userCategories.length > 0) {
-            filtered = filtered.filter(video =>
-                video.category && userCategories.includes(video.category)
-            );
-        }
-        // If the user has no preferred categories yet (brand new
-        // account), there is nothing to restrict to, so we simply show
-        // the discovery feed the backend already ranked for them.
-    } else {
+    if (!isDefaultView) {
         if (activeCategory !== "All") {
             filtered = filtered.filter(video =>
                 video.category && video.category.toLowerCase() === activeCategory.toLowerCase()
@@ -262,7 +308,7 @@ function applyFiltersAndRender() {
         if (searchQuery) {
             msg = `No videos match your search query "${escapeHTML(searchQuery)}".`;
         } else if (isDefaultView) {
-            msg = `No videos match your interests yet. Try exploring a category above!`;
+            msg = `No videos available right now. Try exploring a category above!`;
         } else {
             msg = `No videos found in the "${escapeHTML(activeCategory)}" category.`;
         }
