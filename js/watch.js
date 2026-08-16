@@ -1,8 +1,9 @@
 /**
  * StreamPulse - Video Watch Page Script
  * Reads video ID from window.location.search (?id=VIDEO_ID)
- * Fetches video list from GET /api/auth/get_videos using credentials: "include"
- * Sends Likes to POST /api/auth/likes and stores state in LocalStorage
+ * Fetches video list from GET /api/auth/get_videos
+ * Sends Likes to POST /api/auth/likes
+ * Automatically sends Views to POST /api/auth/views
  */
 
 const API_BASE_URL = "https://youtubemvp-production.up.railway.app";
@@ -13,169 +14,413 @@ let currentVideoId = "";
 let currentVideo = null;
 let allVideos = [];
 
+// Prevent registering the same view more than once
+// while this watch page is open.
+let viewRegisteredForVideoId = "";
+
+
+/**
+ * =========================================================================
+ * INITIALIZE APP
+ * =========================================================================
+ */
+
 document.addEventListener("DOMContentLoaded", async () => {
     parseVideoIdFromURL();
     setupEventListeners();
+
     await checkAuthentication();
     await loadVideoData();
 });
 
+
 /**
- * استخراج الـ ID من رابط الصفحة
+ * =========================================================================
+ * VIDEO ID
+ * =========================================================================
  */
+
 function parseVideoIdFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
-    currentVideoId = urlParams.get("id");
+
+    currentVideoId = urlParams.get("id") || "";
 }
+
 
 /**
  * =========================================================================
- * دوال التخزين المحلي (LocalStorage) للإعجابات
+ * LOCAL STORAGE - LIKES
  * =========================================================================
  */
 
-// جلب قائمة الفيديوهات المعجب بها من التخزين المحلي
 function getLikedVideos() {
     try {
-        return JSON.parse(localStorage.getItem(STORAGE_LIKED_KEY) || "[]");
-    } catch (e) {
-        console.error("Error reading liked videos from localStorage:", e);
+        return JSON.parse(
+            localStorage.getItem(STORAGE_LIKED_KEY) || "[]"
+        );
+    } catch (error) {
+        console.error(
+            "Error reading liked videos from localStorage:",
+            error
+        );
+
         return [];
     }
 }
 
-// فحص هل تم الإعجاب بالفيديو مسبقاً
+
 function isVideoLiked(videoId) {
-    if (!videoId) return false;
+    if (!videoId) {
+        return false;
+    }
+
     const likedList = getLikedVideos();
+
     return likedList.includes(String(videoId));
 }
 
-// حفظ الفيديو في التخزين المحلي
+
 function saveLikedVideo(videoId) {
-    if (!videoId) return;
+    if (!videoId) {
+        return;
+    }
+
     const likedList = getLikedVideos();
+
     if (!likedList.includes(String(videoId))) {
         likedList.push(String(videoId));
-        localStorage.setItem(STORAGE_LIKED_KEY, JSON.stringify(likedList));
+
+        localStorage.setItem(
+            STORAGE_LIKED_KEY,
+            JSON.stringify(likedList)
+        );
     }
 }
 
+
 /**
- * تحديث شكل ولون زر اللايك في الواجهة
- * يجعل الخلفية بيضاء والنص/الأيقونة بلون داكن
+ * =========================================================================
+ * LIKE BUTTON UI
+ * =========================================================================
  */
+
 function updateLikeButtonUI(isLiked) {
     const likeBtn = document.getElementById("like-btn");
-    const likeIcon = document.getElementById("like-icon") || likeBtn?.querySelector("svg");
-    const likeText = document.getElementById("like-text") || likeBtn?.querySelector("span");
 
-    if (!likeBtn) return;
+    const likeIcon =
+        document.getElementById("like-icon") ||
+        likeBtn?.querySelector("svg");
+
+    const likeText =
+        document.getElementById("like-text") ||
+        likeBtn?.querySelector("span");
+
+    if (!likeBtn) {
+        return;
+    }
 
     if (isLiked) {
         likeBtn.classList.add("liked");
         likeBtn.setAttribute("title", "Liked");
-        if (likeText) likeText.textContent = "Liked";
+
+        if (likeText) {
+            likeText.textContent = "Liked";
+        }
+
         if (likeIcon) {
             likeIcon.setAttribute("fill", "currentColor");
         }
     } else {
         likeBtn.classList.remove("liked");
         likeBtn.setAttribute("title", "Like Video");
-        if (likeText) likeText.textContent = "Like";
+
+        if (likeText) {
+            likeText.textContent = "Like";
+        }
+
         if (likeIcon) {
             likeIcon.setAttribute("fill", "none");
         }
     }
 }
 
+
 /**
- * معالجة الضغط على زر الإعجاب وإرسال الطلب إلى الـ API
+ * =========================================================================
+ * LIKE API
+ * =========================================================================
  */
-/**
- * Handle Like Button Click & Send API Request
- */
+
 async function handleLikeClick() {
-    // 1. استخراج معرّف الفيديو
-    const validVideoId = currentVideo?._id || currentVideo?.id || currentVideoId;
+    const validVideoId =
+        currentVideo?._id ||
+        currentVideo?.id ||
+        currentVideoId;
 
     if (!validVideoId) {
         showToast("Error: Video ID not found.");
         return;
     }
 
-    // 2. التحقق من LocalStorage لمنع التكرار
     if (isVideoLiked(validVideoId)) {
         showToast("You have already liked this video!");
         return;
     }
 
     const likeBtn = document.getElementById("like-btn");
-    if (likeBtn) likeBtn.disabled = true;
+
+    if (likeBtn) {
+        likeBtn.disabled = true;
+    }
 
     try {
-        const videoCategory = currentVideo?.category || "General";
+        const videoCategory =
+            currentVideo?.category || "General";
 
-        // 3. إعداد البيانات بالاسم المتطابق مع الباك إند (video_id)
         const payload = {
-            video_id: String(validVideoId), // تم التعديل إلى video_id
+            video_id: String(validVideoId),
             category: String(videoCategory)
         };
 
-        const response = await fetch(`${API_BASE_URL}/api/auth/likes`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            credentials: "include", // لإرسال الكوكيز (token) للباك إند
-            body: JSON.stringify(payload)
-        });
+        const response = await fetch(
+            `${API_BASE_URL}/api/auth/likes`,
+            {
+                method: "POST",
 
-        const data = await response.json().catch(() => ({}));
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                credentials: "include",
+
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const data =
+            await response.json().catch(() => ({}));
 
         if (response.ok && data.success) {
-            // 4. الحفظ في LocalStorage
             saveLikedVideo(validVideoId);
 
-            // 5. تحويل لون الزر للأبيض
             updateLikeButtonUI(true);
 
-            showToast(data.message || "Added like successfully!");
+            showToast(
+                data.message ||
+                "Added like successfully!"
+            );
         } else {
             if (response.status === 401) {
-                showToast(data.message || "Please sign in to like this video.");
+                showToast(
+                    data.message ||
+                    "Please sign in to like this video."
+                );
             } else if (response.status === 409) {
                 saveLikedVideo(validVideoId);
+
                 updateLikeButtonUI(true);
-                showToast("You have already liked this video.");
+
+                showToast(
+                    "You have already liked this video."
+                );
             } else {
-                showToast(data.message || "Failed to like video.");
+                showToast(
+                    data.message ||
+                    "Failed to like video."
+                );
             }
         }
-    } catch (err) {
-        console.error("Like API network error:", err);
-        showToast("Network error. Could not like video.");
+    } catch (error) {
+        console.error(
+            "Like API network error:",
+            error
+        );
+
+        showToast(
+            "Network error. Could not like video."
+        );
     } finally {
-        if (likeBtn) likeBtn.disabled = false;
+        if (likeBtn) {
+            likeBtn.disabled = false;
+        }
     }
 }
 
+
 /**
- * معالجة روابط الوسائط (فيديوهات وصور مصغرة)
+ * =========================================================================
+ * VIEWS API
+ * =========================================================================
+ *
+ * Automatically register one view when the video page successfully
+ * identifies the requested video.
+ *
+ * POST /api/auth/views
+ *
+ * Body:
+ * {
+ *     video_id: "...",
+ *     category: "Gaming"
+ * }
  */
+
+async function registerVideoView() {
+    const validVideoId =
+        currentVideo?._id ||
+        currentVideo?.id ||
+        currentVideoId;
+
+    if (!validVideoId) {
+        console.warn(
+            "Cannot register view: Video ID not found."
+        );
+
+        return;
+    }
+
+    /**
+     * Prevent duplicate requests for the same video
+     * during the current page session.
+     */
+    if (
+        String(viewRegisteredForVideoId) ===
+        String(validVideoId)
+    ) {
+        return;
+    }
+
+    const videoCategory =
+        currentVideo?.category || "General";
+
+    const payload = {
+        video_id: String(validVideoId),
+        category: String(videoCategory)
+    };
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/api/auth/views`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                credentials: "include",
+
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const data =
+            await response.json().catch(() => ({}));
+
+        /**
+         * View successfully registered.
+         */
+        if (response.ok && data.success) {
+            viewRegisteredForVideoId =
+                String(validVideoId);
+
+            /**
+             * Update views displayed on the page.
+             */
+            const viewsEl =
+                document.getElementById("video-views");
+
+            if (
+                viewsEl &&
+                data.views !== undefined
+            ) {
+                viewsEl.textContent =
+                    formatViews(data.views);
+            }
+
+            console.log(
+                "Video view registered successfully:",
+                {
+                    video_id: validVideoId,
+                    category: videoCategory,
+                    views: data.views
+                }
+            );
+
+            return;
+        }
+
+        /**
+         * User is not authenticated.
+         */
+        if (response.status === 401) {
+            console.warn(
+                "View was not registered: user is not authenticated."
+            );
+
+            return;
+        }
+
+        /**
+         * Other backend errors.
+         */
+        console.warn(
+            "View API failed:",
+            data.message ||
+            `HTTP ${response.status}`
+        );
+
+    } catch (error) {
+        /**
+         * If the view request fails, the video page
+         * should still continue working normally.
+         */
+        console.error(
+            "View API network error:",
+            error
+        );
+    }
+}
+
+
+/**
+ * =========================================================================
+ * MEDIA URL HELPERS
+ * =========================================================================
+ */
+
 function getFullUrl(rawUrl) {
-    if (!rawUrl) return "";
-    let cleanUrl = String(rawUrl).replace(/\\/g, "/");
-    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://") || cleanUrl.startsWith("blob:") || cleanUrl.startsWith("data:")) {
+    if (!rawUrl) {
+        return "";
+    }
+
+    let cleanUrl =
+        String(rawUrl).replace(/\\/g, "/");
+
+    if (
+        cleanUrl.startsWith("http://") ||
+        cleanUrl.startsWith("https://") ||
+        cleanUrl.startsWith("blob:") ||
+        cleanUrl.startsWith("data:")
+    ) {
         return cleanUrl;
     }
-    const prefix = cleanUrl.startsWith("/") ? "" : "/";
+
+    const prefix =
+        cleanUrl.startsWith("/") ? "" : "/";
+
     return `${API_BASE_URL}${prefix}${cleanUrl}`;
 }
 
+
 function getVideoSourceUrl(video) {
-    if (!video) return "";
-    if (typeof video === "string") return video;
+    if (!video) {
+        return "";
+    }
+
+    if (typeof video === "string") {
+        return video;
+    }
+
     return (
         video.videoUrl ||
         video.video_url ||
@@ -194,13 +439,21 @@ function getVideoSourceUrl(video) {
         video.stream_url ||
         video.mediaUrl ||
         video.media_url ||
-        (typeof video.video === "string" ? video.video : video.video?.url) ||
+        (
+            typeof video.video === "string"
+                ? video.video
+                : video.video?.url
+        ) ||
         ""
     );
 }
 
+
 function getThumbnailUrl(video) {
-    if (!video) return "";
+    if (!video) {
+        return "";
+    }
+
     return (
         video.thumbnailUrl ||
         video.thumbnail_url ||
@@ -217,91 +470,212 @@ function getThumbnailUrl(video) {
     );
 }
 
+
 function getYouTubeEmbedUrl(url) {
-    if (!url || typeof url !== "string") return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    if (match && match[2] && match[2].length === 11) {
-        return `https://www.youtube.com/embed/${match[2]}?rel=0&autoplay=1`;
+    if (
+        !url ||
+        typeof url !== "string"
+    ) {
+        return null;
     }
+
+    const regExp =
+        /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+
+    const match = url.match(regExp);
+
+    if (
+        match &&
+        match[2] &&
+        match[2].length === 11
+    ) {
+        return (
+            `https://www.youtube.com/embed/${match[2]}?rel=0&autoplay=1`
+        );
+    }
+
     return null;
 }
 
+
 /**
- * إعداد مستمعي الأحداث
+ * =========================================================================
+ * EVENT LISTENERS
+ * =========================================================================
  */
+
 function setupEventListeners() {
-    const sidebarToggleBtn = document.getElementById("sidebar-toggle");
-    const sidebar = document.getElementById("sidebar");
-    const sidebarOverlay = document.getElementById("sidebar-overlay");
+    const sidebarToggleBtn =
+        document.getElementById("sidebar-toggle");
 
-    if (sidebarToggleBtn && sidebar && sidebarOverlay) {
-        sidebarToggleBtn.addEventListener("click", () => {
-            sidebar.classList.toggle("mobile-open");
-            sidebarOverlay.classList.toggle("active");
-        });
+    const sidebar =
+        document.getElementById("sidebar");
 
-        sidebarOverlay.addEventListener("click", () => {
-            sidebar.classList.remove("mobile-open");
-            sidebarOverlay.classList.remove("active");
-        });
-    }
+    const sidebarOverlay =
+        document.getElementById("sidebar-overlay");
 
-    const searchForm = document.getElementById("search-form");
-    if (searchForm) {
-        searchForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const query = document.getElementById("search-input")?.value.trim();
-            if (query) {
-                window.location.href = `search.html?q=${encodeURIComponent(query)}`;
+    if (
+        sidebarToggleBtn &&
+        sidebar &&
+        sidebarOverlay
+    ) {
+        sidebarToggleBtn.addEventListener(
+            "click",
+            () => {
+                sidebar.classList.toggle(
+                    "mobile-open"
+                );
+
+                sidebarOverlay.classList.toggle(
+                    "active"
+                );
             }
-        });
+        );
+
+        sidebarOverlay.addEventListener(
+            "click",
+            () => {
+                sidebar.classList.remove(
+                    "mobile-open"
+                );
+
+                sidebarOverlay.classList.remove(
+                    "active"
+                );
+            }
+        );
     }
 
-    document.getElementById("subscribe-btn")?.addEventListener("click", () => {
-        alert("BACKEND REQUIRED: Subscription system is not implemented in the backend.");
-    });
+    const searchForm =
+        document.getElementById("search-form");
 
-    // ربط زر الإعجاب بالدالة المحدثة
-    document.getElementById("like-btn")?.addEventListener("click", handleLikeClick);
+    if (searchForm) {
+        searchForm.addEventListener(
+            "submit",
+            (e) => {
+                e.preventDefault();
 
-    document.getElementById("save-btn")?.addEventListener("click", () => {
-        alert("BACKEND REQUIRED: Save to Playlist endpoint is not implemented in the backend.");
-    });
+                const query =
+                    document
+                        .getElementById("search-input")
+                        ?.value
+                        .trim();
 
-    document.getElementById("share-btn")?.addEventListener("click", copyShareLink);
-    document.getElementById("retry-btn")?.addEventListener("click", loadVideoData);
+                if (query) {
+                    window.location.href =
+                        `search.html?q=${encodeURIComponent(query)}`;
+                }
+            }
+        );
+    }
+
+    document
+        .getElementById("subscribe-btn")
+        ?.addEventListener(
+            "click",
+            () => {
+                alert(
+                    "BACKEND REQUIRED: Subscription system is not implemented in the backend."
+                );
+            }
+        );
+
+    document
+        .getElementById("like-btn")
+        ?.addEventListener(
+            "click",
+            handleLikeClick
+        );
+
+    document
+        .getElementById("save-btn")
+        ?.addEventListener(
+            "click",
+            () => {
+                alert(
+                    "BACKEND REQUIRED: Save to Playlist endpoint is not implemented in the backend."
+                );
+            }
+        );
+
+    document
+        .getElementById("share-btn")
+        ?.addEventListener(
+            "click",
+            copyShareLink
+        );
+
+    document
+        .getElementById("retry-btn")
+        ?.addEventListener(
+            "click",
+            loadVideoData
+        );
 }
 
+
 /**
- * التحقق من جلسة المستخدم
+ * =========================================================================
+ * AUTHENTICATION
+ * =========================================================================
  */
+
 async function checkAuthentication() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
+        const response =
+            await fetch(
+                `${API_BASE_URL}/api/auth/me`,
+                {
+                    method: "GET",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    credentials: "include"
+                }
+            );
 
         if (response.ok) {
-            const data = await response.json();
-            if (data && data.authenticated && data.user) {
-                currentUser = data.user;
-                renderUserMenu(data.user);
+            const data =
+                await response.json();
+
+            if (
+                data &&
+                data.authenticated &&
+                data.user
+            ) {
+                currentUser =
+                    data.user;
+
+                renderUserMenu(
+                    data.user
+                );
+
                 return;
             }
         }
+
         renderLoginButton();
-    } catch (err) {
-        console.warn("Auth check error:", err);
+
+    } catch (error) {
+        console.warn(
+            "Auth check error:",
+            error
+        );
+
         renderLoginButton();
     }
 }
 
+
 /**
- * تحميل بيانات الفيديو
+ * =========================================================================
+ * LOAD VIDEO DATA
+ * =========================================================================
  */
+
 async function loadVideoData() {
     if (!currentVideoId) {
         showState("not_found");
@@ -311,11 +685,20 @@ async function loadVideoData() {
     showState("loading");
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include"
-        });
+        const response =
+            await fetch(
+                `${API_BASE_URL}/api/auth/get_videos`,
+                {
+                    method: "GET",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    credentials: "include"
+                }
+            );
 
         if (response.status === 401) {
             showState("auth_required");
@@ -323,169 +706,493 @@ async function loadVideoData() {
         }
 
         if (!response.ok) {
-            throw new Error(`Server returned status code ${response.status}`);
+            throw new Error(
+                `Server returned status code ${response.status}`
+            );
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (Array.isArray(data)) {
             allVideos = data;
-        } else if (data && Array.isArray(data.videos)) {
+        } else if (
+            data &&
+            Array.isArray(data.videos)
+        ) {
             allVideos = data.videos;
         } else {
             allVideos = [];
         }
 
-        currentVideo = allVideos.find(v => String(v._id || v.id) === String(currentVideoId));
+        /**
+         * Find requested video.
+         */
+        currentVideo =
+            allVideos.find(
+                video =>
+                    String(
+                        video._id ||
+                        video.id
+                    ) ===
+                    String(currentVideoId)
+            );
 
         if (!currentVideo) {
             showState("not_found");
             return;
         }
 
-        renderVideoPlayer(currentVideo);
-        renderRecommendedVideos(allVideos, currentVideoId);
+        /**
+         * Render video.
+         */
+        renderVideoPlayer(
+            currentVideo
+        );
+
+        /**
+         * Render recommendations.
+         */
+        renderRecommendedVideos(
+            allVideos,
+            currentVideoId
+        );
+
+        /**
+         * ================================================================
+         * IMPORTANT:
+         *
+         * Register the view automatically after the requested video
+         * has been successfully found.
+         * ================================================================
+         */
+        await registerVideoView();
+
+        /**
+         * Finally show the loaded video page.
+         */
         showState("loaded");
-    } catch (err) {
-        console.error("Error loading video:", err);
-        showState("error", "Unable to load video data from the server.");
+
+    } catch (error) {
+        console.error(
+            "Error loading video:",
+            error
+        );
+
+        showState(
+            "error",
+            "Unable to load video data from the server."
+        );
     }
 }
 
+
 /**
- * عرض مشغل الفيديو وتحديث بيانات الواجهة
+ * =========================================================================
+ * RENDER VIDEO PLAYER
+ * =========================================================================
  */
+
 function renderVideoPlayer(video) {
-    const playerWrapper = document.querySelector(".player-wrapper");
-    const titleEl = document.getElementById("video-title");
-    const viewsEl = document.getElementById("video-views");
-    const dateEl = document.getElementById("video-date");
-    const catEl = document.getElementById("video-category-badge");
-    const descEl = document.getElementById("video-description");
-    const channelEl = document.getElementById("channel-name");
+    const playerWrapper =
+        document.querySelector(".player-wrapper");
 
-    const rawVideoUrl = getVideoSourceUrl(video);
-    const rawPosterUrl = getThumbnailUrl(video);
+    const titleEl =
+        document.getElementById("video-title");
 
-    const fullVideoUrl = getFullUrl(rawVideoUrl);
-    const fullPosterUrl = getFullUrl(rawPosterUrl);
+    const viewsEl =
+        document.getElementById("video-views");
 
-    const youtubeEmbedUrl = getYouTubeEmbedUrl(fullVideoUrl || rawVideoUrl);
+    const dateEl =
+        document.getElementById("video-date");
+
+    const catEl =
+        document.getElementById(
+            "video-category-badge"
+        );
+
+    const descEl =
+        document.getElementById(
+            "video-description"
+        );
+
+    const channelEl =
+        document.getElementById(
+            "channel-name"
+        );
+
+    const rawVideoUrl =
+        getVideoSourceUrl(video);
+
+    const rawPosterUrl =
+        getThumbnailUrl(video);
+
+    const fullVideoUrl =
+        getFullUrl(rawVideoUrl);
+
+    const fullPosterUrl =
+        getFullUrl(rawPosterUrl);
+
+    const youtubeEmbedUrl =
+        getYouTubeEmbedUrl(
+            fullVideoUrl ||
+            rawVideoUrl
+        );
 
     if (playerWrapper) {
         if (youtubeEmbedUrl) {
             playerWrapper.innerHTML = `
-                <iframe 
-                    id="youtube-player" 
-                    src="${youtubeEmbedUrl}" 
-                    title="${escapeHTML(video.title || 'YouTube Video')}"
-                    frameborder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                <iframe
+                    id="youtube-player"
+                    src="${youtubeEmbedUrl}"
+                    title="${escapeHTML(
+                        video.title ||
+                        "YouTube Video"
+                    )}"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowfullscreen
-                    style="width: 100%; aspect-ratio: 16/9; border: none; border-radius: 12px;">
-                </iframe>
+                    style="
+                        width: 100%;
+                        aspect-ratio: 16/9;
+                        border: none;
+                        border-radius: 12px;
+                    "
+                ></iframe>
             `;
         } else {
             playerWrapper.innerHTML = `
-                <video id="video-player" class="video-player" controls preload="metadata" ${fullPosterUrl ? `poster="${escapeHTML(fullPosterUrl)}"` : ""}>
-                    ${fullVideoUrl ? `<source id="video-source" src="${escapeHTML(fullVideoUrl)}">` : ""}
+                <video
+                    id="video-player"
+                    class="video-player"
+                    controls
+                    preload="metadata"
+                    ${
+                        fullPosterUrl
+                            ? `poster="${escapeHTML(
+                                fullPosterUrl
+                              )}"`
+                            : ""
+                    }
+                >
+                    ${
+                        fullVideoUrl
+                            ? `
+                                <source
+                                    id="video-source"
+                                    src="${escapeHTML(
+                                        fullVideoUrl
+                                    )}"
+                                >
+                            `
+                            : ""
+                    }
+
                     Your browser does not support HTML5 video playback.
                 </video>
             `;
 
-            const videoPlayer = document.getElementById("video-player");
+            const videoPlayer =
+                document.getElementById(
+                    "video-player"
+                );
+
             if (videoPlayer) {
-                videoPlayer.removeAttribute("crossorigin");
+                videoPlayer.removeAttribute(
+                    "crossorigin"
+                );
+
                 if (fullVideoUrl) {
-                    videoPlayer.src = fullVideoUrl;
+                    videoPlayer.src =
+                        fullVideoUrl;
+
                     videoPlayer.load();
                 }
             }
         }
     }
 
-    if (titleEl) titleEl.textContent = video.title || "Untitled Video";
-    if (viewsEl) viewsEl.textContent = formatViews(video.views);
-    if (dateEl) dateEl.textContent = formatRelativeTime(video.createdAt || video.created_at || video.uploadDate || video.upload_date || video.date);
-    if (catEl) catEl.textContent = video.category || "General";
-    if (descEl) descEl.textContent = video.description || "No description provided for this video.";
-    if (channelEl) channelEl.textContent = video.channelName || video.uploaderName || video.channel_name || video.uploader_name || video.user?.name || video.user?.username || "Channel";
+    if (titleEl) {
+        titleEl.textContent =
+            video.title ||
+            "Untitled Video";
+    }
 
-    // تحديث لون وشكل زر الإعجاب فوراً إذا كان الفيديو محفوظاً في LocalStorage
-    updateLikeButtonUI(isVideoLiked(currentVideoId));
+    if (viewsEl) {
+        viewsEl.textContent =
+            formatViews(video.views);
+    }
 
-    document.title = `${video.title || "Watch Video"} - StreamPulse`;
+    if (dateEl) {
+        dateEl.textContent =
+            formatRelativeTime(
+                video.createdAt ||
+                video.created_at ||
+                video.uploadDate ||
+                video.upload_date ||
+                video.date
+            );
+    }
+
+    if (catEl) {
+        catEl.textContent =
+            video.category ||
+            "General";
+    }
+
+    if (descEl) {
+        descEl.textContent =
+            video.description ||
+            "No description provided for this video.";
+    }
+
+    if (channelEl) {
+        channelEl.textContent =
+            video.channelName ||
+            video.uploaderName ||
+            video.channel_name ||
+            video.uploader_name ||
+            video.user?.name ||
+            video.user?.username ||
+            "Channel";
+    }
+
+    updateLikeButtonUI(
+        isVideoLiked(currentVideoId)
+    );
+
+    document.title =
+        `${video.title || "Watch Video"} - StreamPulse`;
 }
 
+
 /**
- * عرض الفيديوهات المقترحة
+ * =========================================================================
+ * RECOMMENDED VIDEOS
+ * =========================================================================
  */
-function renderRecommendedVideos(videos, activeId) {
-    const recGrid = document.getElementById("recommended-grid");
-    if (!recGrid) return;
 
-    const recommendations = videos.filter(v => String(v._id || v.id) !== String(activeId));
+function renderRecommendedVideos(
+    videos,
+    activeId
+) {
+    const recGrid =
+        document.getElementById(
+            "recommended-grid"
+        );
 
-    if (recommendations.length === 0) {
-        recGrid.innerHTML = `<p style="font-size:13px; color:var(--text-secondary);">No other recommended videos available.</p>`;
+    if (!recGrid) {
         return;
     }
 
-    recGrid.innerHTML = recommendations.map(v => {
-        const vId = v._id || v.id || "";
-        const title = escapeHTML(v.title || "Untitled Video");
-        const rawThumb = getThumbnailUrl(v);
-        const thumb = getFullUrl(rawThumb) || "https://via.placeholder.com/320x180?text=No+Thumbnail";
-        const views = formatViews(v.views);
-        const channel = escapeHTML(v.channelName || v.uploaderName || v.channel_name || v.uploader_name || v.user?.name || v.user?.username || "Channel");
+    const recommendations =
+        videos.filter(
+            video =>
+                String(
+                    video._id ||
+                    video.id
+                ) !==
+                String(activeId)
+        );
 
-        return `
-            <article class="rec-card" data-video-id="${escapeHTML(vId)}">
-                <div class="rec-thumb-container">
-                    <img src="${escapeHTML(thumb)}" alt="${title}" class="rec-thumb-img" loading="lazy">
-                </div>
-                <div class="rec-details">
-                    <h3 class="rec-title" title="${title}">${title}</h3>
-                    <div class="rec-meta">${channel}</div>
-                    <div class="rec-meta">${views}</div>
-                </div>
-            </article>
+    if (recommendations.length === 0) {
+        recGrid.innerHTML = `
+            <p
+                style="
+                    font-size:13px;
+                    color:var(--text-secondary);
+                "
+            >
+                No other recommended videos available.
+            </p>
         `;
-    }).join("");
 
-    recGrid.querySelectorAll(".rec-card").forEach(card => {
-        card.addEventListener("click", () => {
-            const vId = card.getAttribute("data-video-id");
-            if (vId) {
-                window.location.href = `watch.html?id=${encodeURIComponent(vId)}`;
-            }
+        return;
+    }
+
+    recGrid.innerHTML =
+        recommendations
+            .map(video => {
+                const vId =
+                    video._id ||
+                    video.id ||
+                    "";
+
+                const title =
+                    escapeHTML(
+                        video.title ||
+                        "Untitled Video"
+                    );
+
+                const rawThumb =
+                    getThumbnailUrl(
+                        video
+                    );
+
+                const thumb =
+                    getFullUrl(
+                        rawThumb
+                    ) ||
+                    "https://via.placeholder.com/320x180?text=No+Thumbnail";
+
+                const views =
+                    formatViews(
+                        video.views
+                    );
+
+                const channel =
+                    escapeHTML(
+                        video.channelName ||
+                        video.uploaderName ||
+                        video.channel_name ||
+                        video.uploader_name ||
+                        video.user?.name ||
+                        video.user?.username ||
+                        "Channel"
+                    );
+
+                return `
+                    <article
+                        class="rec-card"
+                        data-video-id="${escapeHTML(vId)}"
+                    >
+                        <div class="rec-thumb-container">
+                            <img
+                                src="${escapeHTML(thumb)}"
+                                alt="${title}"
+                                class="rec-thumb-img"
+                                loading="lazy"
+                            >
+                        </div>
+
+                        <div class="rec-details">
+                            <h3
+                                class="rec-title"
+                                title="${title}"
+                            >
+                                ${title}
+                            </h3>
+
+                            <div class="rec-meta">
+                                ${channel}
+                            </div>
+
+                            <div class="rec-meta">
+                                ${views}
+                            </div>
+                        </div>
+                    </article>
+                `;
+            })
+            .join("");
+
+    recGrid
+        .querySelectorAll(".rec-card")
+        .forEach(card => {
+            card.addEventListener(
+                "click",
+                () => {
+                    const vId =
+                        card.getAttribute(
+                            "data-video-id"
+                        );
+
+                    if (vId) {
+                        window.location.href =
+                            `watch.html?id=${encodeURIComponent(vId)}`;
+                    }
+                }
+            );
         });
-    });
 }
+
+
+/**
+ * =========================================================================
+ * SHARE
+ * =========================================================================
+ */
 
 function copyShareLink() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-        showToast("Link copied to clipboard!");
-    }).catch(() => {
-        showToast("Failed to copy link.");
-    });
+    navigator.clipboard
+        .writeText(window.location.href)
+        .then(() => {
+            showToast(
+                "Link copied to clipboard!"
+            );
+        })
+        .catch(() => {
+            showToast(
+                "Failed to copy link."
+            );
+        });
 }
+
+
+/**
+ * =========================================================================
+ * TOAST
+ * =========================================================================
+ */
 
 function showToast(msg) {
-    const toast = document.getElementById("toast");
-    if (toast) {
-        toast.textContent = msg;
-        toast.classList.remove("hidden");
-        setTimeout(() => toast.classList.add("hidden"), 3000);
+    const toast =
+        document.getElementById(
+            "toast"
+        );
+
+    if (!toast) {
+        return;
     }
+
+    toast.textContent = msg;
+
+    toast.classList.remove(
+        "hidden"
+    );
+
+    setTimeout(() => {
+        toast.classList.add(
+            "hidden"
+        );
+    }, 3000);
 }
 
-function showState(state, message = "") {
-    const skeleton = document.getElementById("watch-skeleton");
-    const container = document.getElementById("watch-container");
-    const authState = document.getElementById("auth-required-state");
-    const notFoundState = document.getElementById("not-found-state");
-    const errorState = document.getElementById("error-state");
+
+/**
+ * =========================================================================
+ * STATE MANAGEMENT
+ * =========================================================================
+ */
+
+function showState(
+    state,
+    message = ""
+) {
+    const skeleton =
+        document.getElementById(
+            "watch-skeleton"
+        );
+
+    const container =
+        document.getElementById(
+            "watch-container"
+        );
+
+    const authState =
+        document.getElementById(
+            "auth-required-state"
+        );
+
+    const notFoundState =
+        document.getElementById(
+            "not-found-state"
+        );
+
+    const errorState =
+        document.getElementById(
+            "error-state"
+        );
 
     skeleton?.classList.add("hidden");
     container?.classList.add("hidden");
@@ -494,100 +1201,364 @@ function showState(state, message = "") {
     errorState?.classList.add("hidden");
 
     if (state === "loading") {
-        skeleton?.classList.remove("hidden");
+        skeleton?.classList.remove(
+            "hidden"
+        );
+
     } else if (state === "loaded") {
-        container?.classList.remove("hidden");
+        container?.classList.remove(
+            "hidden"
+        );
+
     } else if (state === "auth_required") {
-        authState?.classList.remove("hidden");
+        authState?.classList.remove(
+            "hidden"
+        );
+
     } else if (state === "not_found") {
-        notFoundState?.classList.remove("hidden");
+        notFoundState?.classList.remove(
+            "hidden"
+        );
+
     } else if (state === "error") {
         if (errorState) {
-            const msgEl = document.getElementById("error-message");
-            if (msgEl && message) msgEl.textContent = message;
-            errorState.classList.remove("hidden");
+            const msgEl =
+                document.getElementById(
+                    "error-message"
+                );
+
+            if (
+                msgEl &&
+                message
+            ) {
+                msgEl.textContent =
+                    message;
+            }
+
+            errorState.classList.remove(
+                "hidden"
+            );
         }
     }
 }
 
+
+/**
+ * =========================================================================
+ * LOGIN BUTTON
+ * =========================================================================
+ */
+
 function renderLoginButton() {
-    const headerAuthSection = document.getElementById("header-auth-section");
-    if (!headerAuthSection) return;
+    const headerAuthSection =
+        document.getElementById(
+            "header-auth-section"
+        );
+
+    if (!headerAuthSection) {
+        return;
+    }
 
     headerAuthSection.innerHTML = `
-        <a href="login.html" class="btn btn-outline">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
+        <a
+            href="login.html"
+            class="btn btn-outline"
+        >
+            <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <path
+                    d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                ></path>
+
+                <circle
+                    cx="12"
+                    cy="7"
+                    r="4"
+                ></circle>
             </svg>
+
             Sign In
         </a>
     `;
 }
 
-function renderUserMenu(user) {
-    const headerAuthSection = document.getElementById("header-auth-section");
-    if (!headerAuthSection) return;
 
-    const userInitial = user.name ? user.name.charAt(0).toUpperCase() : "U";
+/**
+ * =========================================================================
+ * USER MENU
+ * =========================================================================
+ */
+
+function renderUserMenu(user) {
+    const headerAuthSection =
+        document.getElementById(
+            "header-auth-section"
+        );
+
+    if (!headerAuthSection) {
+        return;
+    }
+
+    const userInitial =
+        user.name
+            ? user.name
+                .charAt(0)
+                .toUpperCase()
+            : "U";
 
     headerAuthSection.innerHTML = `
         <div class="user-profile-menu">
-            <button id="user-avatar-btn" class="avatar-btn">${userInitial}</button>
-            <div id="user-dropdown" class="user-dropdown hidden">
+
+            <button
+                id="user-avatar-btn"
+                class="avatar-btn"
+                aria-label="User Menu"
+            >
+                ${userInitial}
+            </button>
+
+            <div
+                id="user-dropdown"
+                class="user-dropdown hidden"
+            >
                 <div class="dropdown-header">
-                    <div class="dropdown-user-name">${escapeHTML(user.name || "User")}</div>
-                    <div class="dropdown-user-email">${escapeHTML(user.email || "")}</div>
+
+                    <div class="dropdown-user-name">
+                        ${escapeHTML(
+                            user.name ||
+                            "User"
+                        )}
+                    </div>
+
+                    <div class="dropdown-user-email">
+                        ${escapeHTML(
+                            user.email ||
+                            ""
+                        )}
+                    </div>
+
                 </div>
-                <a href="create-channel.html" class="dropdown-item">Create Channel</a>
-                <a href="upload.html" class="dropdown-item">Upload Video</a>
+
+                <a
+                    href="create-channel.html"
+                    class="dropdown-item"
+                >
+                    Create Channel
+                </a>
+
+                <a
+                    href="upload.html"
+                    class="dropdown-item"
+                >
+                    Upload Video
+                </a>
             </div>
         </div>
     `;
 
-    const avatarBtn = document.getElementById("user-avatar-btn");
-    const dropdown = document.getElementById("user-dropdown");
-    if (avatarBtn && dropdown) {
-        avatarBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            dropdown.classList.toggle("hidden");
-        });
-        document.addEventListener("click", () => dropdown.classList.add("hidden"));
+    const avatarBtn =
+        document.getElementById(
+            "user-avatar-btn"
+        );
+
+    const dropdown =
+        document.getElementById(
+            "user-dropdown"
+        );
+
+    if (
+        avatarBtn &&
+        dropdown
+    ) {
+        avatarBtn.addEventListener(
+            "click",
+            (e) => {
+                e.stopPropagation();
+
+                dropdown.classList.toggle(
+                    "hidden"
+                );
+            }
+        );
+
+        document.addEventListener(
+            "click",
+            () => {
+                dropdown.classList.add(
+                    "hidden"
+                );
+            }
+        );
     }
 }
 
+
+/**
+ * =========================================================================
+ * FORMAT VIEWS
+ * =========================================================================
+ */
+
 function formatViews(views) {
-    const num = Number(views) || 0;
-    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M views";
-    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K views";
-    return `${num} view${num === 1 ? "" : "s"}`;
+    const num =
+        Number(views) || 0;
+
+    if (num >= 1000000) {
+        return (
+            (num / 1000000)
+                .toFixed(1)
+                .replace(/\.0$/, "") +
+            "M views"
+        );
+    }
+
+    if (num >= 1000) {
+        return (
+            (num / 1000)
+                .toFixed(1)
+                .replace(/\.0$/, "") +
+            "K views"
+        );
+    }
+
+    return (
+        `${num} view${
+            num === 1 ? "" : "s"
+        }`
+    );
 }
 
-function formatRelativeTime(dateString) {
-    if (!dateString) return "Recently";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "Recently";
 
-    const seconds = Math.floor((new Date() - date) / 1000);
-    let interval = Math.floor(seconds / 31536000);
-    if (interval >= 1) return `${interval} year${interval === 1 ? "" : "s"} ago`;
-    interval = Math.floor(seconds / 2592000);
-    if (interval >= 1) return `${interval} month${interval === 1 ? "" : "s"} ago`;
-    interval = Math.floor(seconds / 86400);
-    if (interval >= 1) return `${interval} day${interval === 1 ? "" : "s"} ago`;
-    interval = Math.floor(seconds / 3600);
-    if (interval >= 1) return `${interval} hour${interval === 1 ? "" : "s"} ago`;
-    interval = Math.floor(seconds / 60);
-    if (interval >= 1) return `${interval} minute${interval === 1 ? "" : "s"} ago`;
+/**
+ * =========================================================================
+ * FORMAT RELATIVE TIME
+ * =========================================================================
+ */
+
+function formatRelativeTime(
+    dateString
+) {
+    if (!dateString) {
+        return "Recently";
+    }
+
+    const date =
+        new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+        return "Recently";
+    }
+
+    const seconds =
+        Math.floor(
+            (new Date() - date) / 1000
+        );
+
+    let interval =
+        Math.floor(
+            seconds / 31536000
+        );
+
+    if (interval >= 1) {
+        return (
+            `${interval} year${
+                interval === 1 ? "" : "s"
+            } ago`
+        );
+    }
+
+    interval =
+        Math.floor(
+            seconds / 2592000
+        );
+
+    if (interval >= 1) {
+        return (
+            `${interval} month${
+                interval === 1 ? "" : "s"
+            } ago`
+        );
+    }
+
+    interval =
+        Math.floor(
+            seconds / 86400
+        );
+
+    if (interval >= 1) {
+        return (
+            `${interval} day${
+                interval === 1 ? "" : "s"
+            } ago`
+        );
+    }
+
+    interval =
+        Math.floor(
+            seconds / 3600
+        );
+
+    if (interval >= 1) {
+        return (
+            `${interval} hour${
+                interval === 1 ? "" : "s"
+            } ago`
+        );
+    }
+
+    interval =
+        Math.floor(
+            seconds / 60
+        );
+
+    if (interval >= 1) {
+        return (
+            `${interval} minute${
+                interval === 1 ? "" : "s"
+            } ago`
+        );
+    }
+
     return "Just now";
 }
 
+
+/**
+ * =========================================================================
+ * ESCAPE HTML
+ * =========================================================================
+ */
+
 function escapeHTML(str) {
-    if (typeof str !== "string") return "";
+    if (typeof str !== "string") {
+        return "";
+    }
+
     return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
