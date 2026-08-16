@@ -1,293 +1,204 @@
-/**
- * StreamPulse - Create Channel Page Script
- * Verifies authentication via GET /api/auth/me before rendering
- * Submits channel payload via POST /api/auth/channels using credentials: "include"
- */
-
-const API_BASE_URL = "https://youtubemvp-production.up.railway.app";
-
-let currentUser = null;
-
-document.addEventListener("DOMContentLoaded", async () => {
-    setupEventListeners();
-    await checkAuthAndInitialize();
-});
-
-/**
- * Event Listeners Registration
- */
-function setupEventListeners() {
-    // Mobile Sidebar Toggle
-    const sidebarToggleBtn = document.getElementById("sidebar-toggle");
-    const sidebar = document.getElementById("sidebar");
-    const sidebarOverlay = document.getElementById("sidebar-overlay");
-
-    if (sidebarToggleBtn && sidebar && sidebarOverlay) {
-        sidebarToggleBtn.addEventListener("click", () => {
-            sidebar.classList.toggle("mobile-open");
-            sidebarOverlay.classList.toggle("active");
-        });
-
-        sidebarOverlay.addEventListener("click", () => {
-            sidebar.classList.remove("mobile-open");
-            sidebarOverlay.classList.remove("active");
-        });
-    }
-
-    // Header Search Handler
-    const searchForm = document.getElementById("search-form");
-    if (searchForm) {
-        searchForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const query = document.getElementById("search-input")?.value.trim();
-            if (query) {
-                window.location.href = `search.html?q=${encodeURIComponent(query)}`;
-            }
-        });
-    }
-
-    // Channel Form Submit Handler
-    const channelForm = document.getElementById("create-channel-form");
-    if (channelForm) {
-        channelForm.addEventListener("submit", handleFormSubmit);
-    }
-}
-
-/**
- * Authentication Verification prior to displaying page
- * GET /api/auth/me
- */
-async function checkAuthAndInitialize() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            credentials: "include"
-        });
-
-        if (!response.ok) {
-            window.location.href = "login.html";
-            return;
-        }
-
-        const data = await response.json();
-
-        if (data && data.authenticated && data.user) {
-            currentUser = data.user;
-            renderUserMenu(data.user);
-            showFormCard();
-        } else {
-            window.location.href = "login.html";
-        }
-    } catch (err) {
-        console.error("Auth check failed:", err);
-        window.location.href = "login.html";
-    }
-}
-
-/**
- * Render Header User Avatar Dropdown
- */
-function renderUserMenu(user) {
-    const headerAuthSection = document.getElementById("header-auth-section");
-    if (!headerAuthSection) return;
-
-    const userInitial = user.name ? user.name.charAt(0).toUpperCase() : "U";
-
-    headerAuthSection.innerHTML = `
-        <div class="user-profile-menu">
-            <button id="user-avatar-btn" class="avatar-btn" aria-label="User Menu">${userInitial}</button>
-            <div id="user-dropdown" class="user-dropdown hidden">
-                <div class="dropdown-header">
-                    <div class="dropdown-user-name">${escapeHTML(user.name || "User")}</div>
-                    <div class="dropdown-user-email">${escapeHTML(user.email || "")}</div>
-                </div>
-                <a href="create-channel.html" class="dropdown-item">Create Channel</a>
-                <a href="upload.html" class="dropdown-item">Upload Video</a>
-            </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Channel - Youtube</title>
+    <link rel="stylesheet" href="css/channel.css">
+</head>
+<body>
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle Navigation Menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <a href="index.html" class="brand-logo" aria-label="Youtube Home">
+                <svg class="brand-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>
+                </svg>
+                <span class="brand-name">Youtube</span>
+            </a>
         </div>
-    `;
 
-    const avatarBtn = document.getElementById("user-avatar-btn");
-    const dropdown = document.getElementById("user-dropdown");
-    if (avatarBtn && dropdown) {
-        avatarBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            dropdown.classList.toggle("hidden");
-        });
-        document.addEventListener("click", () => dropdown.classList.add("hidden"));
-    }
-}
+        <div class="header-center">
+            <form id="search-form" class="search-box">
+                <div class="search-input-wrapper">
+                    <input type="text" id="search-input" placeholder="Search videos..." autocomplete="off">
+                </div>
+                <button type="submit" class="search-btn" aria-label="Search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+            </form>
+        </div>
 
-/**
- * Unhide Channel Card after authentication check succeeds
- */
-function showFormCard() {
-    const authLoadingState = document.getElementById("auth-loading-state");
-    const channelFormCard = document.getElementById("channel-form-card");
+        <div class="header-right" id="header-auth-section">
+            <div class="auth-loading-spinner" id="auth-spinner"></div>
+        </div>
+    </header>
 
-    authLoadingState?.classList.add("hidden");
-    channelFormCard?.classList.remove("hidden");
-}
+    <!-- App Layout -->
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="app-sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <a href="index.html" class="nav-item">
+                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        <span class="nav-text">Home</span>
+                    </a>
+                    <a href="#" class="nav-item disabled-nav" title="BACKEND REQUIRED: Subscriptions Feed">
+                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 11a9 9 0 0 1 9 9"></path>
+                            <path d="M4 4a16 16 0 0 1 16 16"></path>
+                            <circle cx="5" cy="19" r="1"></circle>
+                        </svg>
+                        <span class="nav-text">Subscriptions</span>
+                        <span class="badge-backend">Req</span>
+                    </a>
+                </div>
 
-/**
- * Form Submission & Channel Creation
- * POST /api/auth/channels
- */
-async function handleFormSubmit(e) {
-    e.preventDefault();
-    clearBannersAndErrors();
+                <hr class="sidebar-divider">
 
-    const nameInput = document.getElementById("name");
-    const descInput = document.getElementById("description");
+                <div class="nav-section">
+                    <div class="nav-section-title">Creator Actions</div>
+                    <a href="create-channel.html" class="nav-item active">
+                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                            <line x1="19" y1="8" x2="19" y2="14"></line>
+                            <line x1="16" y1="11" x2="22" y2="11"></line>
+                        </svg>
+                        <span class="nav-text">Create Channel</span>
+                    </a>
+                    <a href="upload.html" class="nav-item">
+                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <span class="nav-text">Upload Video</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
 
-    const name = nameInput ? nameInput.value.trim() : "";
-    const description = descInput ? descInput.value.trim() : "";
+        <!-- Sidebar Mobile Overlay Backdrop -->
+        <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-    // Client-side Validation
-    let isValid = true;
+        <!-- Main Workspace Area -->
+        <main class="channel-main-content">
+            <!-- Initial Auth Checking Indicator -->
+            <div id="auth-loading-state" class="state-container">
+                <div class="spinner-large"></div>
+                <p>Verifying authentication session...</p>
+            </div>
 
-    if (!name) {
-        showFieldError("name", "Channel name is required.");
-        isValid = false;
-    } else if (name.length < 3) {
-        showFieldError("name", "Channel name must be at least 3 characters.");
-        isValid = false;
-    }
+            <!-- Create Channel Container Card -->
+            <div id="channel-form-card" class="channel-card hidden">
+                <div class="card-header">
+                    <div class="header-icon-badge">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="3"></circle>
+                        </svg>
+                    </div>
+                    <h1 class="card-title">Create Your Channel</h1>
+                    <p class="card-subtitle">Set up your channel details to start uploading and publishing video content on Youtube.</p>
+                </div>
 
-    if (!description) {
-        showFieldError("description", "Channel description is required.");
-        isValid = false;
-    } else if (description.length < 10) {
-        showFieldError("description", "Please provide a description of at least 10 characters.");
-        isValid = false;
-    }
+                <!-- Global Error Banner -->
+                <div id="error-banner" class="alert alert-error hidden" role="alert" aria-live="polite">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span id="error-banner-text"></span>
+                </div>
 
-    if (!isValid) return;
+                <!-- Create Channel Form -->
+                <form id="create-channel-form" class="channel-form" novalidate>
+                    <!-- Channel Name -->
+                    <div class="form-group">
+                        <label for="name" class="form-label">Channel Name</label>
+                        <input type="text" id="name" name="name" class="form-input" placeholder="e.g. Tech Explorer, Gaming Hub..." autocomplete="off" required>
+                        <span id="name-error" class="field-error-msg hidden"></span>
+                    </div>
 
-    // Loading Spinner
-    setSubmitLoading(true);
+                    <!-- Channel Description -->
+                    <div class="form-group">
+                        <label for="description" class="form-label">Channel Description</label>
+                        <textarea id="description" name="description" class="form-textarea" rows="4" placeholder="Tell viewers what your channel is about..." required></textarea>
+                        <span id="description-error" class="field-error-msg hidden"></span>
+                    </div>
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/channels`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            credentials: "include",
-            body: JSON.stringify({
-                name: name,
-                description: description
-            })
-        });
+                    <!-- Backend Limitations Notice -->
+                    <div class="backend-notice-box">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span><strong>Note:</strong> Custom Channel Avatar and Cover Banner uploads are currently <span class="badge-backend">BACKEND REQUIRED</span> as the channel schema supports channel name and description only.</span>
+                    </div>
 
-        const data = await response.json().catch(() => ({}));
+                    <!-- Form Action Buttons -->
+                    <div class="form-actions">
+                        <button type="submit" id="submit-btn" class="btn btn-primary">
+                            <span id="btn-text">Create Channel</span>
+                            <div id="btn-spinner" class="spinner hidden"></div>
+                        </button>
+                        <a href="index.html" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
 
-        if (response.status === 201 || response.ok) {
-            showSuccessState(data.channel || { name, description });
-        } else if (response.status === 400) {
-            showGlobalError(data.message || "Name and description are required.");
-        } else if (response.status === 401) {
-            showGlobalError("Your login session has expired. Redirecting to login...");
-            setTimeout(() => { window.location.href = "login.html"; }, 2000);
-        } else {
-            showGlobalError(data.message || "Failed to create channel. Please try again.");
-        }
-    } catch (err) {
-        console.error("Create channel error:", err);
-        showGlobalError("Network error. Unable to connect to the backend server.");
-    } finally {
-        setSubmitLoading(false);
-    }
-}
+                <!-- Success State View -->
+                <div id="success-card" class="success-container hidden">
+                    <div class="success-icon-badge">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2ba640" stroke-width="2.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                    </div>
+                    <h2>Channel Created Successfully!</h2>
+                    <p class="success-message">Your channel has been registered. You can now start uploading videos.</p>
 
-/**
- * Switch view to Success State upon successful channel creation
- */
-function showSuccessState(channel) {
-    const formEl = document.getElementById("create-channel-form");
-    const successCard = document.getElementById("success-card");
-    const createdName = document.getElementById("created-channel-name");
-    const createdDesc = document.getElementById("created-channel-desc");
+                    <div class="channel-summary-box">
+                        <div class="summary-label">Channel Name</div>
+                        <div id="created-channel-name" class="summary-value"></div>
 
-    if (formEl) formEl.classList.add("hidden");
+                        <div class="summary-label" style="margin-top: 12px;">Description</div>
+                        <div id="created-channel-desc" class="summary-value text-secondary"></div>
+                    </div>
 
-    if (createdName) createdName.textContent = channel.name || "My Channel";
-    if (createdDesc) createdDesc.textContent = channel.description || "";
+                    <div class="success-actions">
+                        <a href="upload.html" class="btn btn-primary">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Upload Your First Video
+                        </a>
+                        <a href="index.html" class="btn btn-outline">Back to Home Page</a>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
 
-    if (successCard) successCard.classList.remove("hidden");
-}
-
-/**
- * Display Input Field Error Message
- */
-function showFieldError(fieldId, message) {
-    const inputEl = document.getElementById(fieldId);
-    const errorEl = document.getElementById(`${fieldId}-error`);
-
-    if (inputEl) inputEl.classList.add("input-invalid");
-    if (errorEl) {
-        errorEl.textContent = message;
-        errorEl.classList.remove("hidden");
-    }
-}
-
-/**
- * Display Global Alert Banner
- */
-function showGlobalError(message) {
-    const banner = document.getElementById("error-banner");
-    const textEl = document.getElementById("error-banner-text");
-
-    if (banner && textEl) {
-        textEl.textContent = message;
-        banner.classList.remove("hidden");
-    }
-}
-
-/**
- * Clear Previous Errors
- */
-function clearBannersAndErrors() {
-    const errorBanner = document.getElementById("error-banner");
-    if (errorBanner) errorBanner.classList.add("hidden");
-
-    ["name", "description"].forEach(fieldId => {
-        const inputEl = document.getElementById(fieldId);
-        const errorEl = document.getElementById(`${fieldId}-error`);
-
-        if (inputEl) inputEl.classList.remove("input-invalid");
-        if (errorEl) {
-            errorEl.textContent = "";
-            errorEl.classList.add("hidden");
-        }
-    });
-}
-
-/**
- * Toggle Submit Button Loading Spinner State
- */
-function setSubmitLoading(isLoading) {
-    const btn = document.getElementById("submit-btn");
-    const btnText = document.getElementById("btn-text");
-    const btnSpinner = document.getElementById("btn-spinner");
-
-    if (btn) btn.disabled = isLoading;
-    if (btnText) btnText.classList.toggle("hidden", isLoading);
-    if (btnSpinner) btnSpinner.classList.toggle("hidden", !isLoading);
-}
-
-/**
- * XSS Helper Function
- */
-function escapeHTML(str) {
-    if (typeof str !== "string") return "";
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
+    <!-- Scripts -->
+    <script src="js/create-channel.js"></script>
+</body>
+</html>
