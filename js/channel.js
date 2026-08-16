@@ -1,241 +1,412 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Youtube - View Channel</title>
-    <link rel="stylesheet" href="css/channel.css">
-</head>
-<body>
-    <!-- Top Navigation Header -->
-    <header class="app-header">
-        <div class="header-left">
-            <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle Navigation Menu">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
-            </button>
-            <a href="index.html" class="brand-logo" aria-label="Youtube Home">
-                <svg class="brand-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>
-                </svg>
-                <span class="brand-name">Youtube</span>
-            </a>
-        </div>
+/**
+ * StreamPulse - Channel Page View Script
+ * Reads ?id=CHANNEL_ID from URL
+ * Fetches video list from GET /api/auth/get_videos using credentials: "include"
+ * Filters videos matching video.channelId === CHANNEL_ID
+ */
 
-        <div class="header-center">
-            <form id="search-form" class="search-box">
-                <div class="search-input-wrapper">
-                    <input type="text" id="search-input" placeholder="Search videos..." autocomplete="off">
-                </div>
-                <button type="submit" class="search-btn" aria-label="Search">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                </button>
-            </form>
-        </div>
+const API_BASE_URL = "https://youtubemvp-production.up.railway.app";
 
-        <div class="header-right" id="header-auth-section">
-            <div class="auth-loading-spinner" id="auth-spinner"></div>
-        </div>
-    </header>
+let currentUser = null;
+let currentChannelId = "";
+let channelVideos = [];
+let allVideos = [];
 
-    <!-- App Layout Container -->
-    <div class="app-layout">
-        <!-- Sidebar Navigation -->
-        <aside id="sidebar" class="app-sidebar">
-            <nav class="sidebar-nav">
-                <div class="nav-section">
-                    <a href="index.html" class="nav-item">
-                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                        </svg>
-                        <span class="nav-text">Home</span>
-                    </a>
-                    <a href="#" class="nav-item disabled-nav" title="BACKEND REQUIRED: Subscriptions Feed">
-                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M4 11a9 9 0 0 1 9 9"></path>
-                            <path d="M4 4a16 16 0 0 1 16 16"></path>
-                            <circle cx="5" cy="19" r="1"></circle>
-                        </svg>
-                        <span class="nav-text">Subscriptions</span>
-                        <span class="badge-backend">Req</span>
-                    </a>
-                </div>
+document.addEventListener("DOMContentLoaded", async () => {
+    parseChannelIdFromURL();
+    setupEventListeners();
+    await checkAuthentication();
+    await loadChannelData();
+});
 
-                <hr class="sidebar-divider">
+/**
+ * Extract 'id' query parameter from URL
+ */
+function parseChannelIdFromURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    currentChannelId = (urlParams.get("id") || "").trim();
+}
 
-                <div class="nav-section">
-                    <div class="nav-section-title">Creator Actions</div>
-                    <a href="create-channel.html" class="nav-item">
-                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                            <line x1="19" y1="8" x2="19" y2="14"></line>
-                            <line x1="16" y1="11" x2="22" y2="11"></line>
-                        </svg>
-                        <span class="nav-text">Create Channel</span>
-                    </a>
-                    <a href="upload.html" class="nav-item">
-                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        <span class="nav-text">Upload Video</span>
-                    </a>
-                </div>
-            </nav>
-        </aside>
+/**
+ * DOM Event Listeners Registration
+ */
+function setupEventListeners() {
+    // Sidebar Mobile Drawer Toggle
+    const sidebarToggleBtn = document.getElementById("sidebar-toggle");
+    const sidebar = document.getElementById("sidebar");
+    const sidebarOverlay = document.getElementById("sidebar-overlay");
 
-        <!-- Sidebar Mobile Overlay Backdrop -->
-        <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    if (sidebarToggleBtn && sidebar && sidebarOverlay) {
+        sidebarToggleBtn.addEventListener("click", () => {
+            sidebar.classList.toggle("mobile-open");
+            sidebarOverlay.classList.toggle("active");
+        });
 
-        <!-- Channel Workspace -->
-        <main class="channel-page-main">
-            <!-- Loading Skeleton State -->
-            <div id="channel-skeleton" class="state-container">
-                <div class="spinner-large"></div>
-                <p>Loading channel workspace...</p>
+        sidebarOverlay.addEventListener("click", () => {
+            sidebar.classList.remove("mobile-open");
+            sidebarOverlay.classList.remove("active");
+        });
+    }
+
+    // Header Search Handler
+    const searchForm = document.getElementById("search-form");
+    if (searchForm) {
+        searchForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const query = document.getElementById("search-input")?.value.trim();
+            if (query) {
+                window.location.href = `search.html?q=${encodeURIComponent(query)}`;
+            }
+        });
+    }
+
+    // Subscribe Button Handler
+    const subscribeBtn = document.getElementById("subscribe-btn");
+    if (subscribeBtn) {
+        subscribeBtn.addEventListener("click", () => {
+            alert("BACKEND REQUIRED: Subscription system endpoint is not implemented on the backend.");
+        });
+    }
+
+    // Tab Switcher Handler
+    const tabBtns = document.querySelectorAll(".tab-btn");
+    tabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            tabBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            const tabTarget = btn.getAttribute("data-tab");
+            switchTab(tabTarget);
+        });
+    });
+
+    // Retry Button Handler
+    document.getElementById("retry-btn")?.addEventListener("click", loadChannelData);
+}
+
+/**
+ * Switch Tab Content View (Videos vs About)
+ */
+function switchTab(tabName) {
+    const videosContent = document.getElementById("tab-content-videos");
+    const aboutContent = document.getElementById("tab-content-about");
+
+    if (tabName === "about") {
+        videosContent?.classList.add("hidden");
+        aboutContent?.classList.remove("hidden");
+    } else {
+        aboutContent?.classList.add("hidden");
+        videosContent?.classList.remove("hidden");
+    }
+}
+
+/**
+ * Check User Session via GET /api/auth/me
+ */
+async function checkAuthentication() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include"
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.authenticated && data.user) {
+                currentUser = data.user;
+                renderUserMenu(data.user);
+                return;
+            }
+        }
+        renderLoginButton();
+    } catch (err) {
+        console.warn("Auth check error:", err);
+        renderLoginButton();
+    }
+}
+
+/**
+ * Fetch Video Collection and filter by channelId
+ * Uses GET /api/auth/get_videos
+ */
+async function loadChannelData() {
+    if (!currentChannelId) {
+        showState("error", "No channel ID provided in the URL query string (?id=CHANNEL_ID).");
+        return;
+    }
+
+    showState("loading");
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include"
+        });
+
+        if (response.status === 401) {
+            showState("auth_required");
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(`Server returned status code ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (Array.isArray(data)) {
+            allVideos = data;
+        } else if (data && Array.isArray(data.videos)) {
+            allVideos = data.videos;
+        } else {
+            allVideos = [];
+        }
+
+        // Filter videos matching video.channelId === CHANNEL_ID
+        channelVideos = allVideos.filter(v => String(v.channelId) === String(currentChannelId));
+
+        renderChannelHeaderInfo();
+        renderChannelVideos();
+        renderAboutTabInfo();
+
+        showState("loaded");
+    } catch (err) {
+        console.error("Error loading channel data:", err);
+        showState("error", "Unable to load channel content from the backend server.");
+    }
+}
+
+/**
+ * Render Header Channel Information
+ */
+function renderChannelHeaderInfo() {
+    const titleEl = document.getElementById("channel-title");
+    const videoCountEl = document.getElementById("channel-video-count");
+    const descSnippetEl = document.getElementById("channel-header-desc");
+
+    // Infer channel name from video metadata if present, else fallback
+    let detectedName = "Channel " + currentChannelId.substring(0, 8);
+    let detectedDesc = "No description provided for this channel.";
+
+    if (channelVideos.length > 0) {
+        const first = channelVideos[0];
+        if (first.channelName) detectedName = first.channelName;
+        else if (first.channel_name) detectedName = first.channel_name;
+
+        if (first.description) detectedDesc = first.description;
+    }
+
+    if (titleEl) titleEl.textContent = detectedName;
+    if (videoCountEl) videoCountEl.textContent = `${channelVideos.length} video${channelVideos.length === 1 ? "" : "s"}`;
+    if (descSnippetEl) descSnippetEl.textContent = detectedDesc;
+
+    document.title = `${detectedName} - StreamPulse`;
+}
+
+/**
+ * Render Video Grid inside Videos Tab
+ */
+function renderChannelVideos() {
+    const videoGrid = document.getElementById("channel-video-grid");
+    const emptyState = document.getElementById("channel-videos-empty");
+
+    if (!videoGrid) return;
+
+    if (channelVideos.length === 0) {
+        videoGrid.classList.add("hidden");
+        emptyState?.classList.remove("hidden");
+        return;
+    }
+
+    emptyState?.classList.add("hidden");
+    videoGrid.classList.remove("hidden");
+
+    videoGrid.innerHTML = channelVideos.map(video => createVideoCardHTML(video)).join("");
+
+    videoGrid.querySelectorAll(".video-card").forEach(card => {
+        card.addEventListener("click", () => {
+            const videoId = card.getAttribute("data-video-id");
+            if (videoId) {
+                window.location.href = `watch.html?id=${encodeURIComponent(videoId)}`;
+            }
+        });
+    });
+}
+
+/**
+ * Template for Video Card inside Channel Grid
+ */
+function createVideoCardHTML(video) {
+    const videoId = video._id || video.id || "";
+    const title = escapeHTML(video.title || "Untitled Video");
+    const thumbnail = video.thumbnailUrl || "https://via.placeholder.com/640x360?text=No+Thumbnail";
+    const views = formatViews(video.views);
+    const time = formatRelativeTime(video.createdAt || video.created_at);
+    const category = escapeHTML(video.category || "General");
+
+    return `
+        <article class="video-card" data-video-id="${escapeHTML(videoId)}">
+            <div class="thumbnail-container">
+                <img src="${escapeHTML(thumbnail)}" alt="${title}" class="thumbnail-img" loading="lazy" onerror="this.src='https://via.placeholder.com/640x360?text=Image+Error';">
+                <span class="duration-badge" title="BACKEND REQUIRED: Video Duration">--:--</span>
             </div>
-
-            <!-- Authentication Required State (401 Error) -->
-            <div id="auth-required-state" class="state-container hidden">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3ea6ff" stroke-width="1.5">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-                <h2>Sign in to view channels</h2>
-                <p>Your backend requires an active user login to view channel content.</p>
-                <div class="state-actions">
-                    <a href="login.html" class="btn btn-primary">Sign In</a>
-                    <a href="register.html" class="btn btn-outline">Create Account</a>
-                </div>
-            </div>
-
-            <!-- Generic Server Error State -->
-            <div id="error-state" class="state-container hidden">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ff4e4e" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-                <h2>Channel Failed to Load</h2>
-                <p id="error-message">Unable to retrieve channel videos from the server.</p>
-                <button id="retry-btn" class="btn btn-primary">Retry</button>
-            </div>
-
-            <!-- Loaded Channel View -->
-            <div id="channel-container" class="hidden">
-                <!-- Channel Header Banner -->
-                <div class="channel-banner-container"></div>
-
-                <!-- Channel Header Details Section -->
-                <section class="channel-profile-header">
-                    <div class="channel-header-content">
-                        <div class="channel-avatar-xl">
-                            <svg width="60" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="12" cy="7" r="4"></circle>
-                            </svg>
-                        </div>
-                        <div class="channel-header-details">
-                            <div class="channel-title-row">
-                                <h1 id="channel-title" class="channel-title-main">Channel</h1>
-                                <button id="subscribe-btn" class="btn btn-subscribe" title="BACKEND REQUIRED: Subscriptions Endpoint">
-                                    Subscribe <span class="badge-backend">Req</span>
-                                </button>
-                            </div>
-
-                            <div class="channel-sub-meta">
-                                <span class="badge-backend" title="BACKEND REQUIRED: Custom Handles">Handle Req</span>
-                                <span>•</span>
-                                <span title="BACKEND REQUIRED: Subscribers Count">1.2M subscribers <span class="badge-backend">Req</span></span>
-                                <span>•</span>
-                                <span id="channel-video-count">0 videos</span>
-                            </div>
-
-                            <p id="channel-header-desc" class="channel-header-desc">Channel description placeholder.</p>
-                        </div>
+            <div class="video-details">
+                <div class="video-info">
+                    <h3 class="video-title" title="${title}">${title}</h3>
+                    <div class="video-meta">
+                        <span>${views}</span> • <span>${time}</span>
                     </div>
-
-                    <!-- Channel Navigation Tabs -->
-                    <nav class="tab-navigation-bar">
-                        <button class="tab-btn active" data-tab="videos">Videos</button>
-                        <button class="tab-btn" data-tab="about">About</button>
-                    </nav>
-                </section>
-
-                <!-- Tab Workspaces -->
-                <div class="channel-tab-workspace">
-                    <!-- Videos Tab Content -->
-                    <div id="tab-content-videos" class="tab-content">
-                        <h2 class="section-heading">Uploaded Videos</h2>
-
-                        <div id="channel-videos-empty" class="state-container hidden" style="padding: 40px 0;">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
-                                <line x1="7" y1="2" x2="7" y2="22"></line>
-                                <line x1="17" y1="2" x2="17" y2="22"></line>
-                                <line x1="2" y1="12" x2="22" y2="12"></line>
-                            </svg>
-                            <h3>No Videos Uploaded Yet</h3>
-                            <p>This channel has not published any videos yet.</p>
-                        </div>
-
-                        <div id="channel-video-grid" class="video-grid"></div>
-                    </div>
-
-                    <!-- About Tab Content -->
-                    <div id="tab-content-about" class="tab-content hidden">
-                        <div class="about-grid">
-                            <div class="about-card">
-                                <h3>Description</h3>
-                                <p id="about-description" class="about-text">This channel currently has no description provided.</p>
-                            </div>
-
-                            <div class="about-card">
-                                <h3>Channel Stats</h3>
-                                <div class="stat-row">
-                                    <span class="stat-label">Channel ID</span>
-                                    <span id="about-channel-id" class="stat-val">--</span>
-                                </div>
-                                <div class="stat-row">
-                                    <span class="stat-label">Total Videos</span>
-                                    <span id="about-total-videos" class="stat-val">0</span>
-                                </div>
-                                <div class="stat-row">
-                                    <span class="stat-label">Total Views</span>
-                                    <span id="about-total-views" class="stat-val">0 views</span>
-                                </div>
-                                <div class="stat-row">
-                                    <span class="stat-label">Subscribers</span>
-                                    <span class="stat-val">Unavailable <span class="badge-backend">Req</span></span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Backend Notice Card -->
-                        <div class="backend-notice-box" style="margin-top: 24px;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="16" x2="12" y2="12"></line>
-                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                            </svg>
-                            <span><strong>Backend Endpoint Limitation:</strong> The Express backend currently does not provide a direct <code>GET /api/auth/channels/:id</code> or subscription management endpoints. Video items are dynamically filtered using <code>GET /api/auth/get_videos</code> matching <code>video.channelId === CHANNEL_ID</code>.</span>
-                        </div>
-                    </div>
+                    <div class="video-category-tag">${category}</div>
                 </div>
             </div>
-        </main>
-    </div>
+        </article>
+    `;
+}
 
-    <!-- Scripts -->
-    <script src="js/channel.js"></script>
-</body>
-</html>
+/**
+ * Render About Tab Stats & Channel Metadata
+ */
+function renderAboutTabInfo() {
+    const aboutChannelIdEl = document.getElementById("about-channel-id");
+    const aboutDescEl = document.getElementById("about-description");
+    const totalViewsEl = document.getElementById("about-total-views");
+    const totalVideosEl = document.getElementById("about-total-videos");
+
+    const totalViews = channelVideos.reduce((acc, curr) => acc + (Number(curr.views) || 0), 0);
+
+    if (aboutChannelIdEl) aboutChannelIdEl.textContent = currentChannelId;
+    if (totalViewsEl) totalViewsEl.textContent = formatViews(totalViews);
+    if (totalVideosEl) totalVideosEl.textContent = `${channelVideos.length} video${channelVideos.length === 1 ? "" : "s"}`;
+
+    if (channelVideos.length > 0 && channelVideos[0].description) {
+        if (aboutDescEl) aboutDescEl.textContent = channelVideos[0].description;
+    }
+}
+
+/**
+ * State Manager for Channel Workspace
+ */
+function showState(state, message = "") {
+    const skeleton = document.getElementById("channel-skeleton");
+    const container = document.getElementById("channel-container");
+    const authState = document.getElementById("auth-required-state");
+    const errorState = document.getElementById("error-state");
+
+    skeleton?.classList.add("hidden");
+    container?.classList.add("hidden");
+    authState?.classList.add("hidden");
+    errorState?.classList.add("hidden");
+
+    if (state === "loading") {
+        skeleton?.classList.remove("hidden");
+    } else if (state === "loaded") {
+        container?.classList.remove("hidden");
+    } else if (state === "auth_required") {
+        authState?.classList.remove("hidden");
+    } else if (state === "error") {
+        if (errorState) {
+            const msgEl = document.getElementById("error-message");
+            if (msgEl && message) msgEl.textContent = message;
+            errorState.classList.remove("hidden");
+        }
+    }
+}
+
+/**
+ * Header Unauthenticated State
+ */
+function renderLoginButton() {
+    const headerAuthSection = document.getElementById("header-auth-section");
+    if (!headerAuthSection) return;
+
+    headerAuthSection.innerHTML = `
+        <a href="login.html" class="btn btn-outline">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Sign In
+        </a>
+    `;
+}
+
+/**
+ * Header Authenticated State
+ */
+function renderUserMenu(user) {
+    const headerAuthSection = document.getElementById("header-auth-section");
+    if (!headerAuthSection) return;
+
+    const userInitial = user.name ? user.name.charAt(0).toUpperCase() : "U";
+
+    headerAuthSection.innerHTML = `
+        <div class="user-profile-menu">
+            <button id="user-avatar-btn" class="avatar-btn" aria-label="User Menu">${userInitial}</button>
+            <div id="user-dropdown" class="user-dropdown hidden">
+                <div class="dropdown-header">
+                    <div class="dropdown-user-name">${escapeHTML(user.name || "User")}</div>
+                    <div class="dropdown-user-email">${escapeHTML(user.email || "")}</div>
+                </div>
+                <a href="create-channel.html" class="dropdown-item">Create Channel</a>
+                <a href="upload.html" class="dropdown-item">Upload Video</a>
+            </div>
+        </div>
+    `;
+
+    const avatarBtn = document.getElementById("user-avatar-btn");
+    const dropdown = document.getElementById("user-dropdown");
+    if (avatarBtn && dropdown) {
+        avatarBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle("hidden");
+        });
+        document.addEventListener("click", () => dropdown.classList.add("hidden"));
+    }
+}
+
+/**
+ * Format View Count
+ */
+function formatViews(views) {
+    const num = Number(views) || 0;
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M views";
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K views";
+    return `${num} view${num === 1 ? "" : "s"}`;
+}
+
+/**
+ * Format ISO Date
+ */
+function formatRelativeTime(dateString) {
+    if (!dateString) return "Recently";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "Recently";
+
+    const seconds = Math.floor((new Date() - date) / 1000);
+    let interval = Math.floor(seconds / 31536000);
+    if (interval >= 1) return `${interval} year${interval === 1 ? "" : "s"} ago`;
+    interval = Math.floor(seconds / 2592000);
+    if (interval >= 1) return `${interval} month${interval === 1 ? "" : "s"} ago`;
+    interval = Math.floor(seconds / 86400);
+    if (interval >= 1) return `${interval} day${interval === 1 ? "" : "s"} ago`;
+    interval = Math.floor(seconds / 3600);
+    if (interval >= 1) return `${interval} hour${interval === 1 ? "" : "s"} ago`;
+    interval = Math.floor(seconds / 60);
+    if (interval >= 1) return `${interval} minute${interval === 1 ? "" : "s"} ago`;
+    return "Just now";
+}
+
+/**
+ * XSS Security Helper
+ */
+function escapeHTML(str) {
+    if (typeof str !== "string") return "";
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
