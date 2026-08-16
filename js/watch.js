@@ -8,6 +8,7 @@
 
 const API_BASE_URL = "https://youtubemvp-production.up.railway.app";
 const STORAGE_LIKED_KEY = "sp_liked_videos";
+const STORAGE_VIEWED_KEY = "sp_viewed_videos";
 
 let currentUser = null;
 let currentVideoId = "";
@@ -15,7 +16,8 @@ let currentVideo = null;
 let allVideos = [];
 
 // Prevent registering the same view more than once
-// while this watch page is open.
+// while this watch page is open (in-memory guard,
+// on top of the persistent localStorage guard below).
 let viewRegisteredForVideoId = "";
 
 
@@ -94,6 +96,69 @@ function saveLikedVideo(videoId) {
             STORAGE_LIKED_KEY,
             JSON.stringify(likedList)
         );
+    }
+}
+
+
+/**
+ * =========================================================================
+ * LOCAL STORAGE - VIEWS
+ * =========================================================================
+ *
+ * Ensures a view is only ever sent to the API once per video,
+ * per browser. If the user watches the same video again later
+ * (new tab, page refresh, next day, etc.), no new request is
+ * fired and the view count is not inflated.
+ */
+
+function getViewedVideos() {
+    try {
+        return JSON.parse(
+            localStorage.getItem(STORAGE_VIEWED_KEY) || "[]"
+        );
+    } catch (error) {
+        console.error(
+            "Error reading viewed videos from localStorage:",
+            error
+        );
+
+        return [];
+    }
+}
+
+
+function isVideoViewed(videoId) {
+    if (!videoId) {
+        return false;
+    }
+
+    const viewedList = getViewedVideos();
+
+    return viewedList.includes(String(videoId));
+}
+
+
+function saveViewedVideo(videoId) {
+    if (!videoId) {
+        return;
+    }
+
+    const viewedList = getViewedVideos();
+
+    if (!viewedList.includes(String(videoId))) {
+        viewedList.push(String(videoId));
+
+        try {
+            localStorage.setItem(
+                STORAGE_VIEWED_KEY,
+                JSON.stringify(viewedList)
+            );
+        } catch (error) {
+            console.error(
+                "Error saving viewed video to localStorage:",
+                error
+            );
+        }
     }
 }
 
@@ -280,12 +345,30 @@ async function registerVideoView() {
 
     /**
      * Prevent duplicate requests for the same video
-     * during the current page session.
+     * during the current page session (fast in-memory check).
      */
     if (
         String(viewRegisteredForVideoId) ===
         String(validVideoId)
     ) {
+        return;
+    }
+
+    /**
+     * Prevent duplicate requests for the same video
+     * across sessions/reloads. If this browser has already
+     * registered a view for this video before, do not send
+     * another /api/auth/views request at all — just reflect
+     * that fact locally and update the in-memory guard.
+     */
+    if (isVideoViewed(validVideoId)) {
+        viewRegisteredForVideoId = String(validVideoId);
+
+        console.log(
+            "View already registered for this video on this device. Skipping API request.",
+            { video_id: validVideoId }
+        );
+
         return;
     }
 
@@ -324,6 +407,13 @@ async function registerVideoView() {
                 String(validVideoId);
 
             /**
+             * Persist to localStorage so this video is never
+             * counted as a view again on this device/browser,
+             * even after the page is closed and reopened.
+             */
+            saveViewedVideo(validVideoId);
+
+            /**
              * Update views displayed on the page.
              */
             const viewsEl =
@@ -355,6 +445,26 @@ async function registerVideoView() {
         if (response.status === 401) {
             console.warn(
                 "View was not registered: user is not authenticated."
+            );
+
+            return;
+        }
+
+        /**
+         * Server says this view was already counted before
+         * (e.g. duplicate detected server-side). Treat it the
+         * same as success: remember it locally so we never
+         * ask again.
+         */
+        if (response.status === 409) {
+            viewRegisteredForVideoId =
+                String(validVideoId);
+
+            saveViewedVideo(validVideoId);
+
+            console.log(
+                "View was already registered previously (server-confirmed).",
+                { video_id: validVideoId }
             );
 
             return;
