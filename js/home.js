@@ -52,7 +52,13 @@ function setupEventListeners() {
                 document.querySelectorAll(".chip").forEach(chip => chip.classList.remove("active"));
                 e.target.classList.add("active");
                 activeCategory = e.target.getAttribute("data-category") || "All";
-                applyFiltersAndRender();
+                // Re-fetch from the server for this category instead of
+                // filtering the client-side list: the loaded list is
+                // scoped to the user's preferred categories plus a small
+                // fixed slice of "other" videos, so filtering locally
+                // would only ever show that small slice for any
+                // non-preferred category, not everything that exists.
+                fetchVideos(1);
             }
         });
     }
@@ -181,11 +187,15 @@ function renderLoginButton() {
 
 /**
  * Fetch Video Grid Data
- * Uses GET /api/auth/get_videos?page=N
+ * Uses GET /api/auth/get_videos?page=N[&category=X]
  *
- * page 1 replaces the current grid (used on load, retry, and whenever a
- * filter/search changes upstream). page > 1 (via loadMoreVideos) appends
- * to what's already rendered.
+ * page 1 replaces the current grid (used on load, retry, whenever the
+ * category chip changes, or whenever a filter/search changes upstream).
+ * page > 1 (via loadMoreVideos) appends to what's already rendered.
+ *
+ * When activeCategory is anything other than "All", it's sent as
+ * ?category=X so the server returns every video in that category
+ * instead of the personalized feed.
  */
 async function fetchVideos(page = 1) {
     if (page === 1) {
@@ -195,7 +205,11 @@ async function fetchVideos(page = 1) {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos?page=${page}`, {
+        const categoryParam = activeCategory && activeCategory !== "All"
+            ? `&category=${encodeURIComponent(activeCategory)}`
+            : "";
+
+        const response = await fetch(`${API_BASE_URL}/api/auth/get_videos?page=${page}${categoryParam}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json"
@@ -268,39 +282,33 @@ function updateLoadMoreButton() {
 }
 
 /**
- * Filter videos based on active category and search query, then trigger render.
+ * Filter the currently-loaded videos by search query, then trigger render.
  *
  * Behavior:
  * - Default view ("All" category, no search typed): render exactly what
  *   the backend's ranking algorithm returned. That ranking already blends
- *   the user's preferred categories with a controlled slice of "other"
- *   categories for discovery (see PREFERRED_FEED_RATIO server-side) -
- *   we do NOT re-filter down to preferred-only here, since that would
- *   silently throw away the exploration half of the algorithm's output
- *   and cut the feed roughly in half for no reason.
- * - As soon as the user picks a specific category chip, or types a
- *   search query, we search/filter across everything currently loaded -
- *   this is how they explicitly explore categories beyond what's already
- *   on screen.
+ *   the user's preferred categories with a small fixed slice of "other"
+ *   categories for discovery (see OTHER_CATEGORY_COUNT server-side) - we
+ *   do NOT re-filter down to preferred-only here, since that would
+ *   silently throw away the exploration part of the algorithm's output.
+ * - A specific category chip is NOT filtered here anymore: fetchVideos()
+ *   sends ?category=X to the server, which returns every video in that
+ *   category directly (see setupEventListeners). Filtering the client
+ *   list would only ever show whatever tiny "other category" slice
+ *   happened to already be loaded, not the full category.
+ * - Typing a search query still filters across whatever's currently
+ *   loaded (the active category's videos, or the personalized feed).
  */
 function applyFiltersAndRender() {
     let filtered = [...allVideos];
 
     const isDefaultView = activeCategory === "All" && !searchQuery;
 
-    if (!isDefaultView) {
-        if (activeCategory !== "All") {
-            filtered = filtered.filter(video =>
-                video.category && video.category.toLowerCase() === activeCategory.toLowerCase()
-            );
-        }
-
-        if (searchQuery) {
-            filtered = filtered.filter(video =>
-                (video.title && video.title.toLowerCase().includes(searchQuery)) ||
-                (video.description && video.description.toLowerCase().includes(searchQuery))
-            );
-        }
+    if (searchQuery) {
+        filtered = filtered.filter(video =>
+            (video.title && video.title.toLowerCase().includes(searchQuery)) ||
+            (video.description && video.description.toLowerCase().includes(searchQuery))
+        );
     }
 
     if (filtered.length === 0) {
