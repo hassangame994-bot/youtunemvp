@@ -64,13 +64,31 @@ function setupEventListeners() {
     }
 
     // Search Form Handler
+    //
+    // Redirects to search.html (same as watch.js's header search),
+    // which queries the backend's full-catalog search endpoint
+    // (GET /api/auth/search_videos) - that endpoint searches EVERY
+    // video's title/description/category, regardless of the user's
+    // preferences.
+    //
+    // This used to filter locally over `allVideos` instead, but that
+    // array only ever holds whatever's currently loaded on the home
+    // page - the personalized feed (the user's liked/searched
+    // categories, plus a small fixed slice of ~20 "other category"
+    // videos - see OTHER_CATEGORY_COUNT server-side) or a single
+    // category's batch. Searching for something from a category the
+    // user has never liked or searched would frequently find nothing
+    // even though the video exists in the catalog, simply because it
+    // was never fetched into `allVideos` in the first place.
     const searchForm = document.getElementById("search-form");
     const searchInput = document.getElementById("search-input");
     if (searchForm && searchInput) {
         searchForm.addEventListener("submit", (e) => {
             e.preventDefault();
-            searchQuery = searchInput.value.trim().toLowerCase();
-            applyFiltersAndRender();
+            const query = searchInput.value.trim();
+            if (query) {
+                window.location.href = `search.html?q=${encodeURIComponent(query)}`;
+            }
         });
     }
 
