@@ -189,6 +189,19 @@
 
             <!-- Main Video Grid -->
             <div id="video-grid" class="video-grid hidden"></div>
+
+            <!-- Infinite Scroll: brief spinner shown while the next batch of videos is being fetched -->
+            <div id="loading-more-indicator" class="state-container hidden">
+                <div class="auth-loading-spinner"></div>
+            </div>
+
+            <!-- Infinite Scroll: shown once the backend has no further batches left -->
+            <p id="end-of-feed-message" class="hidden" style="text-align:center; padding:24px 0; opacity:0.6;">
+                You're all caught up — no more videos to load.
+            </p>
+
+            <!-- Infinite Scroll: invisible marker watched by home.js to know when to fetch the next batch -->
+            <div id="scroll-sentinel" aria-hidden="true" style="height:1px;"></div>
         </main>
     </div>
 
