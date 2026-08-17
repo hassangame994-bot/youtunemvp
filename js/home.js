@@ -53,11 +53,11 @@ function setupEventListeners() {
                 e.target.classList.add("active");
                 activeCategory = e.target.getAttribute("data-category") || "All";
                 // Re-fetch from the server for this category instead of
-                // filtering the client-side list: the loaded list is
-                // scoped to the user's preferred categories plus a small
-                // fixed slice of "other" videos, so filtering locally
-                // would only ever show that small slice for any
-                // non-preferred category, not everything that exists.
+                // filtering the client-side list: the loaded list is only
+                // ever a batch of videos (see pagination below), so
+                // filtering locally would only ever show whatever tiny
+                // slice happened to already be loaded, not everything
+                // that exists in that category.
                 fetchVideos(1);
             }
         });
@@ -86,6 +86,10 @@ function setupEventListeners() {
     if (loadMoreBtn) {
         loadMoreBtn.addEventListener("click", loadMoreVideos);
     }
+
+    // Infinite Scroll: automatically fetch the next batch of videos as
+    // the user scrolls near the bottom of the page (see setupInfiniteScroll).
+    setupInfiniteScroll();
 }
 
 /**
@@ -189,19 +193,28 @@ function renderLoginButton() {
  * Fetch Video Grid Data
  * Uses GET /api/auth/get_videos?page=N[&category=X]
  *
+ * The backend now returns videos in fixed-size batches instead of the
+ * whole feed at once, along with hasMore telling us whether another
+ * batch exists.
+ *
  * page 1 replaces the current grid (used on load, retry, whenever the
  * category chip changes, or whenever a filter/search changes upstream).
- * page > 1 (via loadMoreVideos) appends to what's already rendered.
+ * page > 1 (via loadMoreVideos, triggered by scrolling near the bottom -
+ * see setupInfiniteScroll) appends to what's already rendered instead of
+ * re-downloading it.
  *
  * When activeCategory is anything other than "All", it's sent as
  * ?category=X so the server returns every video in that category
- * instead of the personalized feed.
+ * instead of the personalized feed (still paginated the same way).
  */
 async function fetchVideos(page = 1) {
     if (page === 1) {
         showState("loading");
+        showLoadingMoreIndicator(false);
+        toggleEndOfFeedMessage(false);
     } else {
         isLoadingMore = true;
+        showLoadingMoreIndicator(true);
     }
 
     try {
@@ -245,12 +258,25 @@ async function fetchVideos(page = 1) {
             hasMoreVideos = false;
         }
 
+        // Page 1 replaces the grid; every later page only ADDS to what's
+        // already loaded, so a video already on screen is never
+        // re-downloaded.
         allVideos = page === 1 ? fetchedVideos : [...allVideos, ...fetchedVideos];
         userCategories = fetchedPreferredCategories;
         currentPage = page;
 
         applyFiltersAndRender();
         updateLoadMoreButton();
+        toggleEndOfFeedMessage(!hasMoreVideos && allVideos.length > 0);
+
+        // If the page we just rendered is short enough that the scroll
+        // sentinel is already inside (or close to) the viewport - a
+        // small batch, a tall screen, whatever - the IntersectionObserver
+        // in setupInfiniteScroll won't fire again on its own, since
+        // nothing changed to trigger a fresh intersection event. Check
+        // manually and keep loading until the sentinel is safely below
+        // the fold or the backend has nothing left to give.
+        requestAnimationFrame(maybeLoadMoreIfSentinelVisible);
     } catch (err) {
         console.error("Error fetching videos:", err);
         if (page === 1) {
@@ -258,13 +284,16 @@ async function fetchVideos(page = 1) {
         }
     } finally {
         isLoadingMore = false;
+        showLoadingMoreIndicator(false);
     }
 }
 
 /**
  * Load the next page of ranked videos and append them to the grid.
- * Safe no-op if there's no more content, a load is already in flight,
- * or the page markup has no #load-more-btn (see setupEventListeners).
+ * Called automatically once the user scrolls near the bottom (see
+ * setupInfiniteScroll), and also by the optional #load-more-btn if the
+ * page markup includes one. Safe no-op if there's no more content or a
+ * load is already in flight.
  */
 function loadMoreVideos() {
     if (!hasMoreVideos || isLoadingMore) return;
@@ -272,8 +301,81 @@ function loadMoreVideos() {
 }
 
 /**
+ * Wires up automatic infinite scroll: watches an invisible marker near
+ * the bottom of the page (#scroll-sentinel) and loads the next batch of
+ * videos as soon as it comes near the viewport - this is what makes
+ * "scroll to the bottom -> more videos load" work without any click.
+ * Safe no-op if the page markup doesn't have a sentinel, or the browser
+ * doesn't support IntersectionObserver.
+ */
+function setupInfiniteScroll() {
+    const sentinel = document.getElementById("scroll-sentinel");
+    if (!sentinel || !("IntersectionObserver" in window)) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                loadMoreVideos();
+            }
+        });
+    }, {
+        root: null,
+        // Start loading a bit BEFORE the sentinel actually enters the
+        // viewport, so the next batch is already there by the time the
+        // user reaches the bottom instead of them seeing a pause.
+        rootMargin: "600px 0px",
+        threshold: 0
+    });
+
+    observer.observe(sentinel);
+}
+
+/**
+ * Manual fallback for setupInfiniteScroll: if the scroll sentinel is
+ * still within reach of the viewport right after a batch finishes
+ * rendering, load another batch immediately instead of waiting for a
+ * scroll event that may never come (e.g. very few results, or a tall
+ * viewport where everything already fits on screen).
+ */
+function maybeLoadMoreIfSentinelVisible() {
+    if (!hasMoreVideos || isLoadingMore) return;
+
+    const sentinel = document.getElementById("scroll-sentinel");
+    if (!sentinel) return;
+
+    const rect = sentinel.getBoundingClientRect();
+    const isNearViewport = rect.top < window.innerHeight + 600;
+
+    if (isNearViewport) {
+        loadMoreVideos();
+    }
+}
+
+/**
+ * Shows/hides the small spinner at the bottom of the grid while the
+ * next batch of videos is being fetched. No-op if the markup doesn't
+ * have a #loading-more-indicator element.
+ */
+function showLoadingMoreIndicator(show) {
+    const indicator = document.getElementById("loading-more-indicator");
+    if (!indicator) return;
+    indicator.classList.toggle("hidden", !show);
+}
+
+/**
+ * Shows/hides the "you're all caught up" message once the backend has
+ * no further batch left for the current category/feed. No-op if the
+ * markup doesn't have an #end-of-feed-message element.
+ */
+function toggleEndOfFeedMessage(show) {
+    const endMsg = document.getElementById("end-of-feed-message");
+    if (!endMsg) return;
+    endMsg.classList.toggle("hidden", !show);
+}
+
+/**
  * Shows/hides the optional #load-more-btn based on whether the backend
- * says there's another page. No-ops if that element isn't in the markup.
+ * says there's another page. No-op if that element isn't in the markup.
  */
 function updateLoadMoreButton() {
     const btn = document.getElementById("load-more-btn");
@@ -286,18 +388,21 @@ function updateLoadMoreButton() {
  *
  * Behavior:
  * - Default view ("All" category, no search typed): render exactly what
- *   the backend's ranking algorithm returned. That ranking already blends
- *   the user's preferred categories with a small fixed slice of "other"
- *   categories for discovery (see OTHER_CATEGORY_COUNT server-side) - we
- *   do NOT re-filter down to preferred-only here, since that would
- *   silently throw away the exploration part of the algorithm's output.
+ *   the backend's ranking algorithm returned for the batches loaded so
+ *   far. That ranking already blends the user's preferred categories
+ *   with a small fixed slice of "other" categories for discovery (see
+ *   OTHER_CATEGORY_COUNT server-side) - we do NOT re-filter down to
+ *   preferred-only here, since that would silently throw away the
+ *   exploration part of the algorithm's output.
  * - A specific category chip is NOT filtered here anymore: fetchVideos()
  *   sends ?category=X to the server, which returns every video in that
- *   category directly (see setupEventListeners). Filtering the client
- *   list would only ever show whatever tiny "other category" slice
- *   happened to already be loaded, not the full category.
+ *   category directly, in batches (see setupEventListeners). Filtering
+ *   the client list would only ever show whatever's already loaded, not
+ *   the full category.
  * - Typing a search query still filters across whatever's currently
- *   loaded (the active category's videos, or the personalized feed).
+ *   loaded (the active category's videos, or the personalized feed) -
+ *   scrolling down to load more batches will widen what a search can
+ *   match against.
  */
 function applyFiltersAndRender() {
     let filtered = [...allVideos];
