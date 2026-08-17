@@ -795,9 +795,17 @@ async function loadVideoData() {
     showState("loading");
 
     try {
-        const response =
+        /**
+         * Fetch the EXACT requested video directly, instead of pulling
+         * the general feed and hoping it happens to contain this id.
+         * The feed is now scoped to the user's preferred categories
+         * plus a small fixed slice of other videos, so a video that
+         * isn't personalized for this user (or simply isn't on the
+         * first page) would otherwise never be found this way.
+         */
+        const videoResponse =
             await fetch(
-                `${API_BASE_URL}/api/auth/get_videos`,
+                `${API_BASE_URL}/api/auth/get_video/${encodeURIComponent(currentVideoId)}`,
                 {
                     method: "GET",
 
@@ -810,43 +818,76 @@ async function loadVideoData() {
                 }
             );
 
-        if (response.status === 401) {
+        if (videoResponse.status === 401) {
             showState("auth_required");
             return;
         }
 
-        if (!response.ok) {
+        if (videoResponse.status === 404) {
+            showState("not_found");
+            return;
+        }
+
+        if (!videoResponse.ok) {
             throw new Error(
-                `Server returned status code ${response.status}`
+                `Server returned status code ${videoResponse.status}`
             );
         }
 
-        const data =
-            await response.json();
+        const videoData =
+            await videoResponse.json();
 
-        if (Array.isArray(data)) {
-            allVideos = data;
-        } else if (
-            data &&
-            Array.isArray(data.videos)
-        ) {
-            allVideos = data.videos;
-        } else {
-            allVideos = [];
-        }
+        currentVideo =
+            videoData && videoData.video
+                ? videoData.video
+                : null;
 
         /**
-         * Find requested video.
+         * Separately fetch the personalized feed to populate the
+         * "recommended" rail. This is best-effort: if it fails, the
+         * page still shows the requested video, just with an empty
+         * recommendations list.
          */
-        currentVideo =
-            allVideos.find(
-                video =>
-                    String(
-                        video._id ||
-                        video.id
-                    ) ===
-                    String(currentVideoId)
+        try {
+            const feedResponse =
+                await fetch(
+                    `${API_BASE_URL}/api/auth/get_videos`,
+                    {
+                        method: "GET",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        credentials: "include"
+                    }
+                );
+
+            if (feedResponse.ok) {
+                const feedData =
+                    await feedResponse.json();
+
+                if (Array.isArray(feedData)) {
+                    allVideos = feedData;
+                } else if (
+                    feedData &&
+                    Array.isArray(feedData.videos)
+                ) {
+                    allVideos = feedData.videos;
+                } else {
+                    allVideos = [];
+                }
+            } else {
+                allVideos = [];
+            }
+        } catch (feedError) {
+            console.warn(
+                "Could not load recommended videos feed:",
+                feedError
             );
+            allVideos = [];
+        }
 
         if (!currentVideo) {
             showState("not_found");
