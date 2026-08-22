@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Youtube - View Channel</title>
     <link rel="stylesheet" href="css/channel.css">
-     <link href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJQAAACUCAMAAABC4vDmAAAAaVBMVEX/////AAD/oqL/8fH/7u7/+Pj/gID/+/v/9PT/HBz/sbH/b2//Ojr/r6//ExP/6Oj/3d3/Pj7/vb3/NTX/xMT/np7/eXn/zc3/S0v/k5P/Jyf/YWH/IiL/Zmb/UVH/hIT/i4v/RUX/1dUvn3C1AAACP0lEQVR4nO2Z25KiMBRFCZFLgyBXaUAQ+P+PbLSccnp6+pCWje3DXm9WWeUylZycs2NZhBBCCCGEEEIIIYQQQgghhJDn4DiO3t3Q84enC+ikKrLIrt2w7dNGCZzSvgvduoyCokr0hkrZsRdFvqPp3WwjpSB+ROgPcbCBkndeo3Th7MGlwrVOSoVop2y9k1LgjeXvEVJ7HypVIZyUKqBSHUaqg0rlGKkc6ZScMFKnBChVYJywmypCSUVAKRslZb+iVAmUqsUfKs2PQQ2UGqQfsq3kaCo1AKVcWcqyptFMygVKiStx3bxeYCR1xDl54i1zO1F6MGgCO1xP5bQGUvOtLX7tSosbK5x3I6m56xoXpN5xUn5qKGXpUpZKcR2V3OJ9rtJa7JtznJQWB6t/r45K6HMa3ASoxZL99T4Lvv0Tb0Cpt59JRa8nVQjrGv+O1E7c6L+yUjvx6sZKmZ6+YJSd1Akn5YvDzP2a6ReU5joFlDKp6Duxv7kBrOgGd59jNlsA777lLqES1/IOsEvwxGM+t8PGOVEIzKjE7VLWYsX4BLIdFqeZn4CcZl5yGIXkeBeQWV61Khi+E1dAqcND8flXmgNQyoJEnkrtkU6IwPoCNrQGpWbYIFZDQk/g2HAFkuUhc7wryyP5Ii3ayfIWGt1lBvyD0VzWV+XWzVYvftPQpg/U9jhth2kjpQvOYaqyoKzPbtiOuSAY52PbHYfaDrJqOjz/Xdn6+2Hbd7bYOYQQQgghhBBCCCGEEEIIIYSQ//EB55EfLAHS5M8AAAAASUVORK5CYII=" type="image/x-icon" rel="icon"/>
-
 </head>
 <body>
     <!-- Top Navigation Header -->
@@ -59,21 +57,19 @@
                         </svg>
                         <span class="nav-text">Home</span>
                     </a>
-                    <a href="#" class="nav-item disabled-nav" title="BACKEND REQUIRED: Subscriptions Feed">
-                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M4 11a9 9 0 0 1 9 9"></path>
-                            <path d="M4 4a16 16 0 0 1 16 16"></path>
-                            <circle cx="5" cy="19" r="1"></circle>
-                        </svg>
-                        <span class="nav-text">Subscriptions</span>
-                        <span class="badge-backend">Req</span>
-                    </a>
                 </div>
 
                 <hr class="sidebar-divider">
 
                 <div class="nav-section">
                     <div class="nav-section-title">Creator Actions</div>
+                    <a href="my-channels.html" class="nav-item">
+                        <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="3"></circle>
+                        </svg>
+                        <span class="nav-text">My Channels</span>
+                    </a>
                     <a href="create-channel.html" class="nav-item">
                         <svg class="nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -149,20 +145,18 @@
                         <div class="channel-header-details">
                             <div class="channel-title-row">
                                 <h1 id="channel-title" class="channel-title-main">Channel</h1>
-                                <button id="subscribe-btn" class="btn btn-subscribe" title="BACKEND REQUIRED: Subscriptions Endpoint">
-                                    Subscribe <span class="badge-backend">Req</span>
+                                <button id="subscribe-btn" class="btn btn-subscribe" title="Subscribe to Channel">
+                                    <span id="subscribe-text">Subscribe</span>
                                 </button>
                             </div>
 
                             <div class="channel-sub-meta">
-                                <span class="badge-backend" title="BACKEND REQUIRED: Custom Handles">Handle Req</span>
-                                <span>•</span>
-                                <span title="BACKEND REQUIRED: Subscribers Count">1.2M subscribers <span class="badge-backend">Req</span></span>
+                                <span id="channel-sub-count">-- subscribers</span>
                                 <span>•</span>
                                 <span id="channel-video-count">0 videos</span>
                             </div>
 
-                            <p id="channel-header-desc" class="channel-header-desc">Channel description placeholder.</p>
+                            <p id="channel-header-desc" class="channel-header-desc">Channel description.</p>
                         </div>
                     </div>
 
@@ -217,19 +211,9 @@
                                 </div>
                                 <div class="stat-row">
                                     <span class="stat-label">Subscribers</span>
-                                    <span class="stat-val">Unavailable <span class="badge-backend">Req</span></span>
+                                    <span id="about-total-subscribers" class="stat-val">--</span>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Backend Notice Card -->
-                        <div class="backend-notice-box" style="margin-top: 24px;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="12" y1="16" x2="12" y2="12"></line>
-                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                            </svg>
-                            <span><strong>Backend Endpoint Limitation:</strong> The Express backend currently does not provide a direct <code>GET /api/auth/channels/:id</code> or subscription management endpoints. Video items are dynamically filtered using <code>GET /api/auth/get_videos</code> matching <code>video.channelId === CHANNEL_ID</code>.</span>
                         </div>
                     </div>
                 </div>
